@@ -1011,8 +1011,6 @@ namespace MHRS_OtomatikRandevu
             }
         }
 
-    }
-
         static void RunSetupWizard()
         {
             Console.Clear();
