@@ -1,0 +1,50 @@
+name: Deploy to Ubuntu Server
+
+# Kod her push'landiğinda veya manuel olarak çalışır
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: '7.0.x'
+        
+    - name: Test build
+      run: |
+        cd MHRS-OtomatikRandevu
+        dotnet build --configuration Release
+        
+    - name: Deploy to server via SSH
+      uses: appleboy/ssh-action@v0.1.5
+      with:
+        host: ${{ secrets.SERVER_HOST }}
+        username: ${{ secrets.SERVER_USER }}
+        key: ${{ secrets.SERVER_SSH_KEY }}
+        script: |
+          cd ~/mhrs-bot/MHRS-OtomatikRandevu
+          
+          # Botu durdur
+          sudo systemctl stop mhrs-bot || true
+          
+          # Yeni kodu çek
+          git pull origin main
+          
+          # Yeniden derle
+          dotnet build
+          
+          # Servisi yeniden başlat
+          sudo systemctl start mhrs-bot
+          
+          # Durum kontrol et
+          sleep 5
+          sudo systemctl status mhrs-bot --no-pager -l

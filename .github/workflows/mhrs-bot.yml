@@ -1,0 +1,63 @@
+name: MHRS Otomatik Randevu Botu
+
+on:
+  schedule:
+    # Akşam toplu iptaller — Türkiye saati 19:55–21:55  ⇒ UTC 16:55–18:55
+    - cron: '*/1 16-18 * * *'
+    # Sabah yeni gün açılışı — Türkiye saati 09:55–10:15 ⇒ UTC 06:55–07:15
+    - cron: '*/1 6-7 * * *'
+    # Her saat başı yoklama — Türkiye saati 11:01–18:01 ⇒ UTC 08:01–15:01
+    - cron: '1 8-15 * * *'
+    # Gece ufak yoklama — Türkiye saati 00:02 ⇒ UTC 21:02
+    - cron: '2 21 * * *'
+  workflow_dispatch:
+
+jobs:
+  mhrs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    concurrency:
+      group: mhrs
+      cancel-in-progress: true
+
+    env:
+      MHRS_TC:       ${{ secrets.MHRS_TC }}
+      MHRS_PASSWORD: ${{ secrets.MHRS_PASSWORD }}
+      IL_ID:         ${{ secrets.IL_ID }}
+      ILCE_ID:       ${{ secrets.ILCE_ID }}
+      KLINIK_ID:     ${{ secrets.KLINIK_ID }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: .NET 7 kurulumu
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '7.0.x'
+
+      - name: Tek dosya yayımla
+        run: |
+          dotnet publish MHRS-OtomatikRandevu/MHRS-OtomatikRandevu.csproj \
+            -c Release -r linux-x64 --self-contained true \
+            /p:PublishSingleFile=true
+
+      # ==== VPN Ayarları ====
+      - name: VPN yapılandırmasını yükle
+        run: |
+          echo "${{ secrets.VPN_CONFIG_B64 }}" | base64 -d > vpn.conf
+
+      - name: OpenVPN bağlantısını başlat
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y openvpn
+          sudo openvpn --config vpn.conf --auth-user-pass <(echo -e "${{ secrets.VPN_USERNAME }}\n${{ secrets.VPN_PASSWORD }}") &
+          sleep 15  # VPN'in bağlanması için 15 sn bekle
+
+      - name: VPN sonrası IP kontrolü (isteğe bağlı)
+        run: curl ifconfig.me
+
+      # ==== Botu Başlat ====
+      - name: Botu başlat
+        run: |
+          ./MHRS-OtomatikRandevu/bin/Release/net7.0/linux-x64/publish/MHRS-OtomatikRandevu
+
