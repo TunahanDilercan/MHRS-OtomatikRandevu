@@ -23,6 +23,16 @@ Gerekli paketleri (.NET SDK) kurmak ve projeyi hazırlamak için:
 ```
 *Bu işlem bitince otomatik olarak kurulum sihirbazı açılacak ve gerekli ayarları (TC, Şifre, İl, Hastane vb.) yapmanızı isteyecektir.*
 
+### 3. Telegram Bildirim Ayarları
+Randevu alındığında anında bildirim almak için Telegram botu kurmanız önerilir:
+
+1.  Telegram'da **@BotFather** kullanıcısını bulun ve `/newbot` komutunu gönderin.
+2.  Botunuza bir isim verin ve size vereceği **API Token**'ı kopyalayın.
+3.  Kendi oluşturduğunuz bota bir mesaj atın (Merhaba vb.).
+4.  Tarayıcıdan `https://api.telegram.org/bot<TOKEN>/getUpdates` adresine gidin.
+5.  JSON sonucunun içinde `"chat":{"id":123456789...` kısmındaki **ID** numarasını alın.
+6.  Bu bilgileri kurulum sihirbazında ilgili alana girin.
+
 ---
 
 ## Yönetim Paneli
