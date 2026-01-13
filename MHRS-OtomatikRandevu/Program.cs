@@ -1222,7 +1222,36 @@ MHRS OTO RANDEVU - KURULUM SİHİRBAZI
                  }
             }
 
-            // 7. ZAMANLAMA SEÇİMİ (Opsiyonel)
+            // 7. TARİH ARALIĞI SEÇİMİ
+            Console.WriteLine($"\n--- TARİH ARALIĞI SEÇİMİ ---");
+            Console.WriteLine("Randevu hangi tarihten itibaren aransın? (GG-AA-YYYY)");
+            Console.WriteLine($"Boş bırakırsanız BUGÜN ({DateTime.Now:dd-MM-yyyy}) kabul edilir.");
+            Console.Write("Başlangıç Tarihi: ");
+            string? inputStartDate = Console.ReadLine()?.Trim();
+            string mhrsStartDate = string.IsNullOrEmpty(inputStartDate) ? DateTime.Now.ToString("dd-MM-yyyy") : inputStartDate;
+
+            Console.WriteLine("\nKaç gün sonrasına kadar aransın? (Örn: 15)");
+            Console.WriteLine("Boş bırakırsanız varsayılan (15 gün) kabul edilir.");
+            Console.Write("Gün Sayısı: ");
+            string? inputDays = Console.ReadLine()?.Trim();
+            int daysToAdd = 15;
+            if (!string.IsNullOrEmpty(inputDays) && int.TryParse(inputDays, out int d) && d > 0) daysToAdd = d;
+            
+            // Bitiş tarihini hesapla (Sadece bilgi amaçlı, asıl tarih .env'ye yazılacak)
+            DateTime startDt;
+            try 
+            {
+               var parts = mhrsStartDate.Split('-');
+               startDt = new DateTime(int.Parse(parts[2]), int.Parse(parts[1]), int.Parse(parts[0]));
+            }
+            catch { startDt = DateTime.Now; }
+            DateTime endDt = startDt.AddDays(daysToAdd);
+            string mhrsEndDate = endDt.ToString("dd-MM-yyyy");
+            
+            Console.WriteLine($"[BİLGİ] {mhrsStartDate} ile {mhrsEndDate} arasındaki randevular aranacak.");
+
+
+            // 8. ZAMANLAMA SEÇİMİ (Opsiyonel)
             Console.WriteLine($"\n--- SAAT / DAKİKA KONTROLÜ ---");
             Console.WriteLine("Botun hangi saatlerde çalışmasını istersiniz?");
             Console.WriteLine("Örnek: 09:55,09:59,10:00,15:55,16:00 (Virgülle ayırın)");
@@ -1275,7 +1304,9 @@ MHRS_DOCTOR_ID={doctorId}
 
 # TARİH VE ZAMANLAMA
 # Başlangıç tarihi (GG-AA-YYYY) boş bırakılırsa 'bugün' olur
-MHRS_START_DATE={DateTime.Now:dd-MM-yyyy}
+MHRS_START_DATE={mhrsStartDate}
+# Bitiş tarihi (GG-AA-YYYY) boş bırakılırsa 15 gün sonrası olur
+MHRS_END_DATE={mhrsEndDate}
 # Özel zamanlama (Boş ise akıllı mod çalışır)
 MHRS_SCHEDULE_TIMES={schedule}
 
