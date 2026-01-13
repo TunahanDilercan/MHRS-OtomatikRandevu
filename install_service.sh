@@ -37,7 +37,10 @@ After=network.target
 Type=simple
 User=root
 WorkingDirectory=$PROJECT_DIR
-ExecStart=$DOTNET_PATH run --configuration Release
+# Derlenmiş dosyayı çalıştır (Setup yaptıysanız bu yol vardır)
+ExecStart=$PROJECT_DIR/bin/publish/MHRS-OtomatikRandevu
+# Eğer sorun yaşarsanız alttaki satırı açıp üstteki kapatın (Eski yöntem)
+# ExecStart=$DOTNET_PATH run --configuration Release
 Restart=always
 RestartSec=30
 Environment=DOTNET_CLI_TELEMETRY_OPTOUT=1

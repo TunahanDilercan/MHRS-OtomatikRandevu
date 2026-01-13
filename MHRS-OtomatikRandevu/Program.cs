@@ -1057,9 +1057,47 @@ MHRS OTO RANDEVU - KURULUM SİHİRBAZI
                     if (line.StartsWith("TELEGRAM_CHAT_ID=")) existingTelChatId = line.Split('=')[1].Trim();
                     if (line.StartsWith("MHRS_SCHEDULE_TIMES=")) existingSchedule = line.Split('=')[1].Trim();
                 }
+            }
 
-                // Argüman gelmedi ama .env'de kayıtlı kullanıcı varsa sor
-                if (!quickMode && !string.IsNullOrEmpty(existingTc) && !string.IsNullOrEmpty(existingPwd))
+            // GECMIS KULLANICILAR VE SECIM EKRANI
+            if (!quickMode)
+            {
+                var historyUsers = LoadUserHistory();
+                if (historyUsers.Count > 0)
+                {
+                    Console.WriteLine("\n--- KAYITLI HESAPLAR (Son 3) ---");
+                    int i = 1;
+                    foreach (var u in historyUsers)
+                    {
+                        string maskTc = u.tc.Length > 4 ? $"{u.tc.Substring(0,2)}*******{u.tc.Substring(u.tc.Length-2)}" : u.tc;
+                        Console.WriteLine($"{i}. {maskTc} (Son: {u.date})");
+                        i++;
+                    }
+                    Console.WriteLine($"{i}. Yeni Hesap Ekle / Farklı Giriş");
+                    Console.WriteLine($"{i+1}. Geçmişi Temizle (Güvenlik)");
+                    
+                    Console.Write($"Seçiminiz (1-{i+1}): ");
+                    if (int.TryParse(Console.ReadLine(), out int choice) && choice > 0 && choice <= i+1)
+                    {
+                        if (choice < i) // User selected from history
+                        {
+                            var selected = historyUsers[choice - 1];
+                            TC_NO = selected.tc;
+                            SIFRE = selected.pwd;
+                            quickMode = true;
+                            Console.WriteLine($"✅ {selected.tc.Substring(0,2)}*** seçildi, giriş yapılıyor...");
+                        }
+                        else if (choice == i + 1) // Clear History
+                        {
+                            try { File.Delete(".user_history"); } catch { }
+                            Console.WriteLine("🗑️ Geçmiş temizlendi. Yeni giriş bekleniyor...");
+                            // Fall through to manual entry
+                        }
+                        // Else (choice == i) -> Find New -> Fall through
+                    }
+                }
+                // Eğer geçmiş yoksa ama .env varsa (Eski davranış)
+                else if (!string.IsNullOrEmpty(existingTc) && !string.IsNullOrEmpty(existingPwd))
                 {
                     Console.WriteLine($"[BİLGİ] Kayıtlı kullanıcı bulundu: {existingTc.Substring(0,2)}*******{existingTc.Substring(existingTc.Length-2)}");
                     Console.Write("Mevcut giriş bilgileri kullanılsın mı? (E/h): ");
@@ -1105,6 +1143,9 @@ MHRS OTO RANDEVU - KURULUM SİHİRBAZI
                 JWT_TOKEN = tokenResult.Token;
                 _client.AddOrUpdateAuthorizationHeader(JWT_TOKEN);
                 Console.WriteLine("✅ Giriş başarılı!\n");
+                
+                // Geçmişe kaydet
+                SaveUserToHistory(TC_NO, SIFRE);
             }
             catch (Exception ex)
             {
@@ -1410,6 +1451,74 @@ TELEGRAM_NOTIFY_FREQUENCY=10
             File.WriteAllText(".env", envContent);
             Console.WriteLine("\n✅ .env dosyası başarıyla oluşturuldu!");
             Console.WriteLine("Kurulum tamamlandı. Botu başlatmak için ./run.sh veya ./bot.sh kullanabilirsiniz.");
+        }
+
+        static void SaveUserToHistory(string tc, string password)
+        {
+            try
+            {
+                string historyFile = ".user_history";
+                var history = new List<string>();
+                
+                if (File.Exists(historyFile))
+                {
+                    history = File.ReadAllLines(historyFile).ToList();
+                }
+
+                history.RemoveAll(line => line.StartsWith(tc + "|"));
+                history.Insert(0, $"{tc}|{password}|{DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+
+                if (history.Count > 3)
+                {
+                    history = history.Take(3).ToList();
+                }
+
+                File.WriteAllLines(historyFile, history);
+            }
+            catch (Exception ex)
+            {
+                 Console.WriteLine($"[UYARI] Geçmiş kaydedilemedi: {ex.Message}");
+            }
+        }
+
+        static List<(string tc, string pwd, string date)> LoadUserHistory()
+        {
+            var list = new List<(string, string, string)>();
+            bool needsUpdate = false;
+            try
+            {
+                if (File.Exists(".user_history"))
+                {
+                    var lines = File.ReadAllLines(".user_history").ToList();
+                    var validLines = new List<string>();
+
+                    foreach (var line in lines)
+                    {
+                        var parts = line.Split('|');
+                        if (parts.Length >= 3)
+                        {
+                            // 15 Günlük Süre Kontrolü (Güvenlik)
+                            if (DateTime.TryParse(parts[2], out DateTime lastLogin) && (DateTime.Now - lastLogin).TotalDays <= 15)
+                            {
+                                list.Add((parts[0], parts[1], parts[2]));
+                                validLines.Add(line);
+                            }
+                            else
+                            {
+                                needsUpdate = true; // Süresi dolmuş kayıt bulundu
+                            }
+                        }
+                    }
+
+                    // Eğer temizlenen kayıt varsa dosyayı güncelle
+                    if (needsUpdate)
+                    {
+                         File.WriteAllLines(".user_history", validLines);
+                    }
+                }
+            }
+            catch { }
+            return list;
         }
 
         // Konsolda şifreyi gizli okuma fonksiyonu

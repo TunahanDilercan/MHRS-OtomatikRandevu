@@ -74,8 +74,8 @@ echo -e "\n--- Proje Hazırlanıyor ---"
 # Restore
 run_step "Bağımlılıklar yükleniyor" "dotnet restore"
 
-# Build (Sessiz mod)
-run_step "Kod derleniyor" "dotnet build --configuration Release --nologo -v q"
+# Publish (Derleme ve Çıktı Alma)
+run_step "Uygulama derleniyor ve hazırlanıyor" "dotnet publish --configuration Release --nologo -v q -o bin/publish"
 
 # Scriptleri yetkilendir
 chmod +x *.sh 2>/dev/null
@@ -85,8 +85,8 @@ echo -e "\n--- Yapılandırma ---"
 echo -e "${BLUE}Kurulum sihirbazı başlatılıyor...${NC}"
 sleep 1
 
-# Sihirbazı çalıştır
-dotnet run --configuration Release -- --setup
+# Sihirbazı çalıştır (Derlenmiş dosya üzerinden)
+./bin/publish/MHRS-OtomatikRandevu --setup
 
 # Geri dön
 cd ..

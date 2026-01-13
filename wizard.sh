@@ -12,7 +12,11 @@ echo -e "${BLUE}=== MHRS Yapılandırma Sihirbazı ===${NC}"
 cd MHRS-OtomatikRandevu || exit
 
 # Sihirbazı çalıştır
-dotnet run --configuration Release -- --setup
+if [ -f "./bin/publish/MHRS-OtomatikRandevu" ]; then
+    ./bin/publish/MHRS-OtomatikRandevu --setup
+else
+    dotnet run --configuration Release -- --setup
+fi
 
 echo -e "${GREEN}Ayarlar güncellendi!${NC}"
 echo -e "Botu başlatmak için './bot.sh' kullanabilirsiniz."

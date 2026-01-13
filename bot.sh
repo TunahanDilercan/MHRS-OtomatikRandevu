@@ -20,5 +20,11 @@ cd MHRS-OtomatikRandevu || exit
 echo -e "${GREEN}Bot başlatılıyor... (Detaylı loglar için yeni terminalde ./logs.sh)${NC}"
 echo -e "${GREEN}Durdurmak için Ctrl+C${NC}"
 
-# Release modunda çalıştır
-dotnet run --configuration Release
+# Publish edilmiş (Derlenmiş) dosyayı çalıştır
+if [ -f "./bin/publish/MHRS-OtomatikRandevu" ]; then
+    ./bin/publish/MHRS-OtomatikRandevu
+else
+    # Eğer derlenmemişse, derleyip çalıştır (Fallback)
+    echo "Derlenmiş dosya bulunamadı, derleniyor..."
+    dotnet run --configuration Release
+fi
