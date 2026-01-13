@@ -158,9 +158,10 @@ while true; do
     echo -e "3) 🔄 Yeniden Başlat (Restart)"
     echo -e "4) 📋 Logları İzle"
     echo -e "5) 🏆 Başarılı Randevuları Gör"
-    echo -e "6) ⚙️  Ayarları Düzenle (Sihirbaz)"
-    echo -e "7) 🚑 Hata Onar / Sıfırla (Reset & Clear)"
-    echo -e "8) 🛠️  Servisi Kur/Onar"
+    echo -e "6) ⚙️  Ayarları Düzenle (Sihirbaz - Sıfırdan)"
+    echo -e "7) 📝 Ayarları Elle Düzenle (.env Editör)"
+    echo -e "8) 🚑 Hata Onar / Sıfırla (Reset & Clear)"
+    echo -e "9) 🛠️  Servisi Kur/Onar"
     echo -e "0) ❌ Çıkış"
     echo -e "${BLUE}---------------------------------------${NC}"
     read -p "Seçiminiz: " option
@@ -172,8 +173,9 @@ while true; do
         4) view_logs ;;
         5) view_success ;;
         6) run_wizard; read -p "Devam etmek için Enter..." ;;
-        7) clean_cache; read -p "Devam etmek için Enter..." ;;
-        8) install_service; read -p "Devam etmek için Enter..." ;;
+        7) ./edit-env.sh; read -p "Devam etmek için Enter..." ;;
+        8) clean_cache; read -p "Devam etmek için Enter..." ;;
+        9) install_service; read -p "Devam etmek için Enter..." ;;
         0) echo "Güle güle!"; exit 0 ;;
         *) echo "Geçersiz seçim!"; sleep 1 ;;
     esac
