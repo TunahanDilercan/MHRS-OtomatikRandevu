@@ -1011,7 +1011,7 @@ namespace MHRS_OtomatikRandevu
             }
         }
 
-        static void RunSetupWizard()
+        static void RunSetupWizard(string? argTc = null, string? argPass = null)
         {
             Console.Clear();
             Console.WriteLine(@"
@@ -1037,18 +1037,29 @@ MHRS OTO RANDEVU - KURULUM SİHİRBAZI
             string existingTelChatId = "";
             string existingSchedule = "";
 
+            // Eğer argüman olarak TC/Şifre geldiyse direkt onları kullan
+            if (!string.IsNullOrEmpty(argTc) && !string.IsNullOrEmpty(argPass))
+            {
+                quickMode = true;
+                TC_NO = argTc;
+                SIFRE = argPass;
+                Console.WriteLine($"[BİLGİ] Seçilen kullanıcı ile oturum açılıyor... ({argTc.Substring(0,2)}***)");
+            }
+
+            // Dosyadan oku (Eğer arg yoksa veya Telegram ayarlarını almak için)
             if (File.Exists(".env"))
             {
                 foreach (var line in File.ReadAllLines(".env"))
                 {
-                    if (line.StartsWith("MHRS_TC=")) existingTc = line.Split('=')[1].Trim();
-                    if (line.StartsWith("MHRS_PASSWORD=")) existingPwd = line.Split('=')[1].Trim();
+                    if (line.StartsWith("MHRS_TC=") && string.IsNullOrEmpty(existingTc)) existingTc = line.Split('=')[1].Trim();
+                    if (line.StartsWith("MHRS_PASSWORD=") && string.IsNullOrEmpty(existingPwd)) existingPwd = line.Split('=')[1].Trim();
                     if (line.StartsWith("TELEGRAM_BOT_TOKEN=")) existingTelToken = line.Split('=')[1].Trim();
                     if (line.StartsWith("TELEGRAM_CHAT_ID=")) existingTelChatId = line.Split('=')[1].Trim();
                     if (line.StartsWith("MHRS_SCHEDULE_TIMES=")) existingSchedule = line.Split('=')[1].Trim();
                 }
 
-                if (!string.IsNullOrEmpty(existingTc) && !string.IsNullOrEmpty(existingPwd))
+                // Argüman gelmedi ama .env'de kayıtlı kullanıcı varsa sor
+                if (!quickMode && !string.IsNullOrEmpty(existingTc) && !string.IsNullOrEmpty(existingPwd))
                 {
                     Console.WriteLine($"[BİLGİ] Kayıtlı kullanıcı bulundu: {existingTc.Substring(0,2)}*******{existingTc.Substring(existingTc.Length-2)}");
                     Console.Write("Mevcut giriş bilgileri kullanılsın mı? (E/h): ");
@@ -1343,28 +1354,24 @@ MHRS OTO RANDEVU - KURULUM SİHİRBAZI
             string telegramToken = existingTelToken;
             string telegramChatId = existingTelChatId;
             
-            // Eğer hızlı moddaysa ve zaten token varsa sorma
+            // Eğer Hızlı Moddaysa (Kullanıcı verildiyse) ve Telegram zaten varsa ASLA sorma
             if (quickMode && !string.IsNullOrEmpty(existingTelToken))
             {
-                Console.WriteLine($"\n[BİLGİ] Telegram ayarları korundu (Token: ...{existingTelToken.Substring(Math.Max(0, existingTelToken.Length-4))})");
+                // Sessizce geç
             }
             else
             {
                 Console.WriteLine($"\n--- TELEGRAM BİLDİRİM AYARLARI ---");
-                Console.WriteLine("Randevu alındığında veya hata oluştuğunda Telegram üzerinden bildirim alabilirsiniz.");
-                
-                if (!string.IsNullOrEmpty(existingTelToken))
-                     Console.WriteLine($"Mevcut Token: ...{existingTelToken.Substring(Math.Max(0, existingTelToken.Length-4))} (Değiştirmek istemiyorsanız 'h' diyebilirsiniz)");
-
-                Console.Write("Telegram bildirimi kullanmak/güncellemek ister misiniz? (e/h): ");
+                Console.WriteLine("Randevu alındığında bildirim almak için.");
+                Console.Write("Telegram ayarlarını yapılandırmak istiyor musunuz? (e/H): ");
                 
                 if (Console.ReadLine()?.ToLower().StartsWith("e") == true)
                 {
-                    Console.Write($"Telegram Bot Token {(!string.IsNullOrEmpty(existingTelToken) ? "(Boş bırakırsanız eskisi kalır)" : "")}: ");
+                    Console.Write("Telegram Bot Token: ");
                     string inputToken = Console.ReadLine()?.Trim() ?? "";
                     if (!string.IsNullOrEmpty(inputToken)) telegramToken = inputToken;
                     
-                    Console.Write($"Telegram Chat ID: {(!string.IsNullOrEmpty(existingTelChatId) ? "(Boş bırakırsanız eskisi kalır)" : "")}: ");
+                    Console.Write("Telegram Chat ID: ");
                     string inputChatId = Console.ReadLine()?.Trim() ?? "";
                     if (!string.IsNullOrEmpty(inputChatId)) telegramChatId = inputChatId;
                 }
