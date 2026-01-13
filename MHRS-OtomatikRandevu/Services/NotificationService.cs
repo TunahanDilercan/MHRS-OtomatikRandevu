@@ -16,9 +16,16 @@ namespace MHRS_OtomatikRandevu.Services
         {
             _httpClient = new HttpClient();
             
-            // .env'den deðerleri oku
-            TELEGRAM_BOT_TOKEN = Environment.GetEnvironmentVariable("TELEGRAM_BOT_TOKEN") ?? "";
-            TELEGRAM_CHAT_ID = Environment.GetEnvironmentVariable("TELEGRAM_CHAT_ID") ?? "";
+            // .env'den degerleri oku
+            TELEGRAM_BOT_TOKEN = Environment.GetEnvironmentVariable("TELEGRAM_BOT_TOKEN")?.Trim() ?? "";
+            TELEGRAM_CHAT_ID = Environment.GetEnvironmentVariable("TELEGRAM_CHAT_ID")?.Trim() ?? "";
+
+            // Eger kullanici token'in basina yanlislikla 'bot' yazdiysa temizle
+            if (!string.IsNullOrEmpty(TELEGRAM_BOT_TOKEN) && TELEGRAM_BOT_TOKEN.ToLower().StartsWith("bot") && TELEGRAM_BOT_TOKEN.Length > 3 && char.IsDigit(TELEGRAM_BOT_TOKEN[3]))
+            {
+                TELEGRAM_BOT_TOKEN = TELEGRAM_BOT_TOKEN.Substring(3);
+                Console.WriteLine("[BILGI] Telegram Token basindaki hatali 'bot' oneki otomatik temizlendi.");
+            }
         }
 
         public async Task SendNotification(string message)
@@ -33,7 +40,9 @@ namespace MHRS_OtomatikRandevu.Services
         {
             try
             {
+                // URL'yi olustur
                 var url = $"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage";
+                
                 var payload = new
                 {
                     chat_id = TELEGRAM_CHAT_ID,
@@ -46,24 +55,29 @@ namespace MHRS_OtomatikRandevu.Services
                 
                 var response = await _httpClient.PostAsync(url, content);
                 
-                if (response.IsSuccessStatusCode)
+                if (!response.IsSuccessStatusCode)
                 {
-                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}]  Telegram bildirimi gönderildi");
-                }
-                else
-                {
-                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}]  Telegram bildirimi gönderilemedi: {response.StatusCode}");
+                    var errorContent = await response.Content.ReadAsStringAsync();
+                    Console.WriteLine($"[UYARI]  Telegram bildirimi gonderilemedi: {response.StatusCode}");
+                    Console.WriteLine($"[DETAY] Telegram Yaniti: {errorContent}");
+                    Console.WriteLine($"[IPUCU] Token veya Chat ID hatali olabilir. Token: {MaskToken(TELEGRAM_BOT_TOKEN)}");
+                    
+                    if (TELEGRAM_BOT_TOKEN.Contains(" ") || TELEGRAM_BOT_TOKEN.Contains("\n") || TELEGRAM_BOT_TOKEN.Contains("\r"))
+                    {
+                        Console.WriteLine("[HATA] Telegram Token icinde bosluk veya satir sonu karakteri var! .env dosyasini kontrol edin.");
+                    }
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[{DateTime.Now:HH:mm:ss}]  Telegram hatasý: {ex.Message}");
+                Console.WriteLine($"[HATA] Telegram servisi hatasi: {ex.Message}");
             }
         }
 
-        public void Dispose()
+        private string MaskToken(string token)
         {
-            _httpClient?.Dispose();
+            if (string.IsNullOrEmpty(token) || token.Length < 10) return "****";
+            return token.Substring(0, 5) + "..." + token.Substring(token.Length - 5);
         }
     }
 }
