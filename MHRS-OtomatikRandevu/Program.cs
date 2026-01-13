@@ -1027,25 +1027,59 @@ MHRS OTO RANDEVU - KURULUM SİHİRBAZI
 ");
 
             _client = new ClientService();
-            _notificationService = new NotificationService(); // Gerekli değil ama nesne olsun
+            _notificationService = new NotificationService();
 
-            // 1. GİRİŞ BİLGİLERİ
-            Console.WriteLine("Lütfen MHRS giriş bilgilerinizi giriniz:");
-            Console.Write("TC Kimlik No: ");
-            string tc = Console.ReadLine()?.Trim() ?? "";
-            
-            Console.Write("e-Devlet / MHRS Şifresi: ");
-            string sifre = ReadPassword();
+            // VAROLAN AYARLARI KONTROL ET (Partial Update Mode)
+            bool quickMode = false;
+            string existingTc = "";
+            string existingPwd = "";
+            string existingTelToken = "";
+            string existingTelChatId = "";
+            string existingSchedule = "";
 
-            if (string.IsNullOrEmpty(tc) || string.IsNullOrEmpty(sifre))
+            if (File.Exists(".env"))
             {
-                Console.WriteLine("Hata: TC ve şifre boş olamaz!");
-                return;
+                foreach (var line in File.ReadAllLines(".env"))
+                {
+                    if (line.StartsWith("MHRS_TC=")) existingTc = line.Split('=')[1].Trim();
+                    if (line.StartsWith("MHRS_PASSWORD=")) existingPwd = line.Split('=')[1].Trim();
+                    if (line.StartsWith("TELEGRAM_BOT_TOKEN=")) existingTelToken = line.Split('=')[1].Trim();
+                    if (line.StartsWith("TELEGRAM_CHAT_ID=")) existingTelChatId = line.Split('=')[1].Trim();
+                    if (line.StartsWith("MHRS_SCHEDULE_TIMES=")) existingSchedule = line.Split('=')[1].Trim();
+                }
+
+                if (!string.IsNullOrEmpty(existingTc) && !string.IsNullOrEmpty(existingPwd))
+                {
+                    Console.WriteLine($"[BİLGİ] Kayıtlı kullanıcı bulundu: {existingTc.Substring(0,2)}*******{existingTc.Substring(existingTc.Length-2)}");
+                    Console.Write("Mevcut giriş bilgileri kullanılsın mı? (E/h): ");
+                    if (Console.ReadLine()?.ToLower().StartsWith("e") != false) // Default Evet
+                    {
+                        quickMode = true;
+                        TC_NO = existingTc;
+                        SIFRE = existingPwd;
+                        Console.WriteLine("✅ Mevcut kullanıcı ile devam ediliyor...");
+                    }
+                }
             }
 
-            // Global değişkenlere ata ki GetToken çalışabilsin
-            TC_NO = tc;
-            SIFRE = sifre;
+            // 1. GİRİŞ BİLGİLERİ (Eğer Hızlı Mod Değilse)
+            if (!quickMode)
+            {
+                Console.WriteLine("\nLütfen MHRS giriş bilgilerinizi giriniz:");
+                Console.Write("TC Kimlik No: ");
+                string tc = Console.ReadLine()?.Trim() ?? "";
+                
+                Console.Write("e-Devlet / MHRS Şifresi: ");
+                string sifre = ReadPassword();
+
+                if (string.IsNullOrEmpty(tc) || string.IsNullOrEmpty(sifre))
+                {
+                    Console.WriteLine("Hata: TC ve şifre boş olamaz!");
+                    return;
+                }
+                TC_NO = tc;
+                SIFRE = sifre;
+            }
 
             // Giriş denemesi
             Console.WriteLine("\nGiriş yapılıyor, lütfen bekleyin...");
@@ -1069,6 +1103,42 @@ MHRS OTO RANDEVU - KURULUM SİHİRBAZI
 
             // 2. İL SEÇİMİ
             Console.WriteLine("--- ŞEHİR SEÇİMİ ---");
+            var provinceListResponse = _client.GetSimple<List<GenericResponseModel>>(MHRSUrls.BaseUrl, MHRSUrls.GetProvinces);
+            if (provinceListResponse == null) { Console.WriteLine("İl listesi alınamadı!"); return; }
+            
+            var provinceList = provinceListResponse.OrderBy(x => x.ValueAsInt).ToList();
+            
+            // İl listesini göster
+            foreach (var p in provinceList)
+            {
+                Console.WriteLine($"{p.ValueAsInt} - {p.Text}");
+            }
+            
+            int provinceId = -1;
+            while(provinceId == -1)
+            {
+                Console.Write("İl Plaka Kodu (Örn: İstanbul için 34): ");
+                if(int.TryParse(Console.ReadLine(), out int plaka) && plaka > 0 && plaka <= 81)
+                {
+                    provinceId = plaka;
+                    // İstanbul kontrolü
+                    if (plaka == 34)
+                    {
+                        Console.WriteLine("1. İstanbul (Avrupa) - 341");
+                        Console.WriteLine("2. İstanbul (Anadolu) - 342");
+                        Console.Write("Seçiminiz (1 veya 2): ");
+                        var sub = Console.ReadLine();
+                        provinceId = sub == "2" ? 342 : 341;
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("Geçersiz plaka kodu!");
+                }
+            }
+
+            // 3. İLÇE SEÇİMİ
+            Console.WriteLine($"\n--- İLÇE SEÇİMİ (İl ID: {provinceId}) ---");
             var provinceListResponse = _client.GetSimple<List<GenericResponseModel>>(MHRSUrls.BaseUrl, MHRSUrls.GetProvinces);
             if (provinceListResponse == null) { Console.WriteLine("İl listesi alınamadı!"); return; }
             
@@ -1252,37 +1322,51 @@ MHRS OTO RANDEVU - KURULUM SİHİRBAZI
 
 
             // 8. ZAMANLAMA SEÇİMİ (Opsiyonel)
-            Console.WriteLine($"\n--- SAAT / DAKİKA KONTROLÜ ---");
-            Console.WriteLine("Botun hangi saatlerde çalışmasını istersiniz?");
-            Console.WriteLine("Örnek: 09:55,09:59,10:00,15:55,16:00 (Virgülle ayırın)");
-            Console.WriteLine("Boş bırakırsanız varsayılan algoritma (her saat başı ve rastgele) çalışır.");
-            Console.Write("Saatler: ");
-            string schedule = Console.ReadLine()?.Trim() ?? "";
-
-            // 8. TELEGRAM BİLDİRİM AYARLARI
-            Console.WriteLine($"\n--- TELEGRAM BİLDİRİM AYARLARI ---");
-            Console.WriteLine("Randevu alındığında veya hata oluştuğunda Telegram üzerinden bildirim alabilirsiniz.");
-            Console.WriteLine("Bunun için:");
-            Console.WriteLine("1. Telegram'da @BotFather ile konuşarak yeni bir bot oluşturun ve TOKEN alın.");
-            Console.WriteLine("2. Telegram'da @userinfobot veya benzeri bir bota yazarak Chat ID'nizi öğrenin.");
+            string schedule = existingSchedule; // Hızlı modda varsayılan olarak eskisi korunur
             
-            Console.Write("Telegram bildirimi kullanmak ister misiniz? (e/h): ");
-            string telegramToken = "";
-            string telegramChatId = "";
-            
-            if (Console.ReadLine()?.ToLower().StartsWith("e") == true)
+            if (!quickMode)
             {
-                Console.Write("Telegram Bot Token: ");
-                telegramToken = Console.ReadLine()?.Trim() ?? "";
+                Console.WriteLine($"\n--- SAAT / DAKİKA KONTROLÜ ---");
+                Console.WriteLine("Botun hangi saatlerde çalışmasını istersiniz?");
+                Console.WriteLine("Örnek: 09:55,09:59,10:00,15:55,16:00 (Virgülle ayırın)");
+                Console.WriteLine("Boş bırakırsanız varsayılan algoritma (her saat başı ve rastgele) çalışır.");
+                Console.Write("Saatler: ");
+                schedule = Console.ReadLine()?.Trim() ?? "";
+            }
+            else
+            {
+                 // Hızlı Modda kullanıcıya sormadan eski ayarı veya boşu kullan
+                 Console.WriteLine($"\n[BİLGİ] Saat zamanlaması eski ayarlardan yüklendi ({ (string.IsNullOrEmpty(schedule) ? "Akıllı Mod" : schedule) })");
+            }
+
+            // 9. TELEGRAM BİLDİRİM AYARLARI
+            string telegramToken = existingTelToken;
+            string telegramChatId = existingTelChatId;
+            
+            // Eğer hızlı moddaysa ve zaten token varsa sorma
+            if (quickMode && !string.IsNullOrEmpty(existingTelToken))
+            {
+                Console.WriteLine($"\n[BİLGİ] Telegram ayarları korundu (Token: ...{existingTelToken.Substring(Math.Max(0, existingTelToken.Length-4))})");
+            }
+            else
+            {
+                Console.WriteLine($"\n--- TELEGRAM BİLDİRİM AYARLARI ---");
+                Console.WriteLine("Randevu alındığında veya hata oluştuğunda Telegram üzerinden bildirim alabilirsiniz.");
                 
-                Console.Write("Telegram Chat ID: ");
-                telegramChatId = Console.ReadLine()?.Trim() ?? "";
+                if (!string.IsNullOrEmpty(existingTelToken))
+                     Console.WriteLine($"Mevcut Token: ...{existingTelToken.Substring(Math.Max(0, existingTelToken.Length-4))} (Değiştirmek istemiyorsanız 'h' diyebilirsiniz)");
+
+                Console.Write("Telegram bildirimi kullanmak/güncellemek ister misiniz? (e/h): ");
                 
-                // Test Bildirimi
-                if (!string.IsNullOrEmpty(telegramToken) && !string.IsNullOrEmpty(telegramChatId))
+                if (Console.ReadLine()?.ToLower().StartsWith("e") == true)
                 {
-                    Console.WriteLine("Telegram ayarları kaydediliyor...");
-                    // Burada test yapılabilir ama şimdilik sadece kaydedelim.
+                    Console.Write($"Telegram Bot Token {(!string.IsNullOrEmpty(existingTelToken) ? "(Boş bırakırsanız eskisi kalır)" : "")}: ");
+                    string inputToken = Console.ReadLine()?.Trim() ?? "";
+                    if (!string.IsNullOrEmpty(inputToken)) telegramToken = inputToken;
+                    
+                    Console.Write($"Telegram Chat ID: {(!string.IsNullOrEmpty(existingTelChatId) ? "(Boş bırakırsanız eskisi kalır)" : "")}: ");
+                    string inputChatId = Console.ReadLine()?.Trim() ?? "";
+                    if (!string.IsNullOrEmpty(inputChatId)) telegramChatId = inputChatId;
                 }
             }
 
