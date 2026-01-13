@@ -23,15 +23,28 @@ check_root() {
 }
 
 # Durum kontrolü
-get_status() {
+get_status_detail() {
     if systemctl is-active --quiet $SERVICE_NAME; then
-        echo -e "${GREEN}ÇALIŞIYOR${NC}"
+        STATUS="${GREEN}ÇALIŞIYOR (RUNNING)${NC}"
+        
+        # Deneme sayısını bul
+        if [ -f "$LOG_FILE" ]; then
+            LAST_ATTEMPT=$(grep -o "Deneme #[0-9]*" "$LOG_FILE" | tail -1 | awk '{print $2}')
+            LAST_TIME=$(tail -n 1 "$LOG_FILE" | awk -F'[\\[\\]]' '{print $2}')
+            
+            if [ ! -z "$LAST_ATTEMPT" ]; then
+                echo -e "$STATUS | ${YELLOW}Son İşlem: ${LAST_ATTEMPT}${NC} (${LAST_TIME})"
+            else
+                echo -e "$STATUS | ${YELLOW}Henüz deneme yapılmadı veya log yok${NC}"
+            fi
+        else
+            echo -e "$STATUS"
+        fi
     else
-        echo -e "${RED}DURDURULDU${NC}"
+        echo -e "${RED}DURDURULDU (STOPPED)${NC}"
     fi
 }
 
-# Başlat
 start_bot() {
     check_root || return
     echo "Bot başlatılıyor..."
@@ -151,7 +164,7 @@ while true; do
     echo -e "${BLUE}=======================================${NC}"
     echo -e "   MHRS OTOMATİK RANDEVU - YÖNETİM   "
     echo -e "${BLUE}=======================================${NC}"
-    echo -e "Bot Durumu: $(get_status)"
+    echo -e "Bot Durumu: $(get_status_detail)"
     echo -e "${BLUE}---------------------------------------${NC}"
     echo -e "1) 🟢 Başlat (Start)"
     echo -e "2) 🔴 Durdur (Stop)"
