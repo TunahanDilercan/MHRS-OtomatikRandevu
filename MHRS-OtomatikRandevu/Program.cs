@@ -1191,42 +1191,6 @@ MHRS OTO RANDEVU - KURULUM SİHİRBAZI
 
             // 3. İLÇE SEÇİMİ
             Console.WriteLine($"\n--- İLÇE SEÇİMİ (İl ID: {provinceId}) ---");
-            var provinceListResponse = _client.GetSimple<List<GenericResponseModel>>(MHRSUrls.BaseUrl, MHRSUrls.GetProvinces);
-            if (provinceListResponse == null) { Console.WriteLine("İl listesi alınamadı!"); return; }
-            
-            var provinceList = provinceListResponse.OrderBy(x => x.ValueAsInt).ToList();
-            
-            // İl listesini göster
-            foreach (var p in provinceList)
-            {
-                Console.WriteLine($"{p.ValueAsInt} - {p.Text}");
-            }
-            
-            int provinceId = -1;
-            while(provinceId == -1)
-            {
-                Console.Write("İl Plaka Kodu (Örn: İstanbul için 34): ");
-                if(int.TryParse(Console.ReadLine(), out int plaka) && plaka > 0 && plaka <= 81)
-                {
-                    provinceId = plaka;
-                    // İstanbul kontrolü
-                    if (plaka == 34)
-                    {
-                        Console.WriteLine("1. İstanbul (Avrupa) - 341");
-                        Console.WriteLine("2. İstanbul (Anadolu) - 342");
-                        Console.Write("Seçiminiz (1 veya 2): ");
-                        var sub = Console.ReadLine();
-                        provinceId = sub == "2" ? 342 : 341;
-                    }
-                }
-                else
-                {
-                    Console.WriteLine("Geçersiz plaka kodu!");
-                }
-            }
-
-            // 3. İLÇE SEÇİMİ
-            Console.WriteLine($"\n--- İLÇE SEÇİMİ (İl ID: {provinceId}) ---");
             var districtList = _client.GetSimple<List<GenericResponseModel>>(MHRSUrls.BaseUrl, string.Format(MHRSUrls.GetDistricts, provinceId));
             int districtId = -1;
             

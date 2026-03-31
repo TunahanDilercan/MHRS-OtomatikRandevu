@@ -74,6 +74,11 @@ namespace MHRS_OtomatikRandevu.Services
             }
         }
 
+        public void Dispose()
+        {
+            _httpClient.Dispose();
+        }
+
         private string MaskToken(string token)
         {
             if (string.IsNullOrEmpty(token) || token.Length < 10) return "****";

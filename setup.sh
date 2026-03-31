@@ -47,9 +47,28 @@ if ! command -v dotnet &> /dev/null; then
     if [ -f /etc/os-release ]; then
         . /etc/os-release
         if [[ "$ID" == "ubuntu" || "$ID" == "debian" ]]; then
-             run_step "Microsoft anahtarları ekleniyor" "wget https://packages.microsoft.com/config/ubuntu/$VERSION_ID/packages-microsoft-prod.deb -O packages-microsoft-prod.deb && dpkg -i packages-microsoft-prod.deb && rm packages-microsoft-prod.deb"
+             UBUNTU_VERSION="${VERSION_ID:-22.04}"
+             if [[ "$UBUNTU_VERSION" != "20.04" && "$UBUNTU_VERSION" != "22.04" && "$UBUNTU_VERSION" != "24.04" ]]; then
+                 UBUNTU_VERSION="22.04"
+             fi
+
+             run_step "Microsoft anahtarları ekleniyor" "wget https://packages.microsoft.com/config/ubuntu/$UBUNTU_VERSION/packages-microsoft-prod.deb -O packages-microsoft-prod.deb && dpkg -i packages-microsoft-prod.deb && rm packages-microsoft-prod.deb"
              run_step "Paket listesi güncelleniyor" "apt-get update"
-             run_step ".NET SDK yükleniyor" "apt-get install -y dotnet-sdk-7.0"
+
+             echo -ne "${BLUE}[INFO]${NC} .NET SDK yükleniyor... "
+             if apt-get install -y dotnet-sdk-8.0 > /tmp/mhrs_install.log 2>&1; then
+                 echo -e "${GREEN}BAŞARILI (.NET 8.0)${NC}"
+             elif apt-get install -y dotnet-sdk-7.0 > /tmp/mhrs_install.log 2>&1; then
+                 echo -e "${GREEN}BAŞARILI (.NET 7.0)${NC}"
+             else
+                 echo -e "${RED}HATA${NC}"
+                 echo -e "\n${RED}!!! Kurulum sırasında bir hata oluştu !!!${NC}"
+                 echo "----------------------------------------"
+                 cat /tmp/mhrs_install.log
+                 echo "----------------------------------------"
+                 echo "Çözüm için yukarıdaki hatayı kontrol edin."
+                 exit 1
+             fi
         else
             echo "Bu sistem için otomatik kurulum desteklenmiyor. Lütfen .NET 7 SDK manuel kurun."
             exit 1
