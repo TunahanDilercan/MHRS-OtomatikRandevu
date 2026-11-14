@@ -30,16 +30,8 @@ namespace MHRS_OtomatikRandevu.Services
         {
             var url = string.Concat(baseUrl, endpoint);
             
-            // Debug: Request bilgilerini yazdır
-            Console.WriteLine($"[DEBUG] Request URL: {url}");
-            Console.WriteLine($"[DEBUG] Authorization Header: {_client.DefaultRequestHeaders.Authorization?.ToString() ?? "YOK"}");
-            
             var httpResponse = _client.GetAsync(url).Result;
             var content = httpResponse.Content.ReadAsStringAsync().Result;
-            
-            // Debug: Response bilgilerini yazdır
-            Console.WriteLine($"[DEBUG] Response Status: {(int)httpResponse.StatusCode} {httpResponse.ReasonPhrase}");
-            Console.WriteLine($"[DEBUG] Response Content: {content}");
             
             if (!httpResponse.IsSuccessStatusCode)
             {
@@ -117,16 +109,8 @@ namespace MHRS_OtomatikRandevu.Services
                 {
                     var url = string.Concat(baseUrl, endpoint);
                     
-                    // Debug: Request bilgilerini yazdır
-                    Console.WriteLine($"[DEBUG] POST Request URL: {url}");
-                    Console.WriteLine($"[DEBUG] Authorization Header: {_client.DefaultRequestHeaders.Authorization?.ToString() ?? "YOK"}");
-                    
                     var response = await _client.PostAsJsonAsync(url, requestModel);
                     var data = await response.Content.ReadAsStringAsync();
-                    
-                    // Debug: Response bilgilerini yazdır
-                    Console.WriteLine($"[DEBUG] POST Response Status: {(int)response.StatusCode} {response.ReasonPhrase}");
-                    Console.WriteLine($"[DEBUG] POST Response Content: {data}");
                     
                     // Check for session expiration in POST responses
                     if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
@@ -207,16 +191,8 @@ namespace MHRS_OtomatikRandevu.Services
         {
             var url = string.Concat(baseUrl, endpoint);
             
-            // Debug: Request bilgilerini yazdır
-            Console.WriteLine($"[DEBUG] PostSimple Request URL: {url}");
-            Console.WriteLine($"[DEBUG] Authorization Header: {_client.DefaultRequestHeaders.Authorization?.ToString() ?? "YOK"}");
-            
             var response = _client.PostAsJsonAsync(url, requestModel).Result;
             var content = response.Content.ReadAsStringAsync().Result;
-            
-            // Debug: Response bilgilerini yazdır
-            Console.WriteLine($"[DEBUG] PostSimple Response Status: {(int)response.StatusCode} {response.ReasonPhrase}");
-            Console.WriteLine($"[DEBUG] PostSimple Response Content: {content}");
             
             // Check for session expiration in PostSimple responses
             if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)

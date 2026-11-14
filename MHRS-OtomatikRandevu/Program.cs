@@ -372,6 +372,14 @@ namespace MHRS_OtomatikRandevu
                 var found = hospitalList.FirstOrDefault(x => x.ValueAsInt == envHospitalId);
                 if (found != null)
                     hospitalIndex = found.ValueAsInt;
+                else if (envHospitalId != -1 && envHospitalId != 0)
+                {
+                    // Yanlış ID'de sessizce FARKETMEZ'e düşmek yerine dur
+                    Console.WriteLine($"[ERROR] MHRS_HOSPITAL_ID={envHospitalId} listede yok. Geçerli seçenekler:");
+                    Console.WriteLine("  -1 - FARKETMEZ");
+                    foreach (var x in hospitalList) Console.WriteLine($"  {x.ValueAsInt} - {x.Text}");
+                    return;
+                }
             }
             // Server mode: Hospital validation
             if (hospitalIndex < -1)
@@ -396,6 +404,14 @@ namespace MHRS_OtomatikRandevu
                 var found = placeList.FirstOrDefault(x => x.ValueAsInt == envPlaceId);
                 if (found != null)
                     placeIndex = found.ValueAsInt;
+                else if (envPlaceId != -1 && envPlaceId != 0)
+                {
+                    // Yanlış ID'de sessizce FARKETMEZ'e düşmek yerine dur
+                    Console.WriteLine($"[ERROR] MHRS_PLACE_ID={envPlaceId} listede yok. Geçerli seçenekler:");
+                    Console.WriteLine("  -1 - FARKETMEZ");
+                    foreach (var x in placeList) Console.WriteLine($"  {x.ValueAsInt} - {x.Text}");
+                    return;
+                }
             }
             // Server mode: Place validation
             if (placeIndex < -1)
@@ -420,6 +436,14 @@ namespace MHRS_OtomatikRandevu
                 var found = doctorList.FirstOrDefault(x => x.ValueAsInt == envDoctorId);
                 if (found != null)
                     doctorIndex = found.ValueAsInt;
+                else if (envDoctorId != -1 && envDoctorId != 0)
+                {
+                    // Yanlış ID'de sessizce FARKETMEZ'e düşmek yerine dur
+                    Console.WriteLine($"[ERROR] MHRS_DOCTOR_ID={envDoctorId} listede yok. Geçerli seçenekler:");
+                    Console.WriteLine("  -1 - FARKETMEZ");
+                    foreach (var x in doctorList) Console.WriteLine($"  {x.ValueAsInt} - {x.Text}");
+                    return;
+                }
             }
             // Server mode: Doctor validation
             if (doctorIndex < -1)
@@ -947,13 +971,23 @@ namespace MHRS_OtomatikRandevu
                 return null;
             }
 
-            var saatSlotList = slotListResponse.Data.FirstOrDefault()?.HekimSlotList.FirstOrDefault()?.MuayeneYeriSlotList.FirstOrDefault()?.SaatSlotList;
-            if (saatSlotList == null || !saatSlotList.Any())
-                return null;
+            // Tüm hekim / muayene yeri / gün kombinasyonlarındaki boş slotları topla
+            // ve başlangıç zamanına göre EN ERKEN olanı seç
+            var bosSlotlar = slotListResponse.Data
+                .Where(r => r?.HekimSlotList != null)
+                .SelectMany(r => r.HekimSlotList)
+                .Where(h => h?.MuayeneYeriSlotList != null)
+                .SelectMany(h => h.MuayeneYeriSlotList)
+                .Where(y => y?.SaatSlotList != null)
+                .SelectMany(y => y.SaatSlotList)
+                .Where(g => g != null && g.Bos && g.SlotList != null)
+                .SelectMany(g => g.SlotList)
+                .Where(x => x != null && x.Bos && x.SubSlot != null)
+                .Select(x => x.SubSlot);
 
-            var slot = saatSlotList.FirstOrDefault(x => x.Bos)?.SlotList.FirstOrDefault(x => x.Bos)?.SubSlot;
-            if (slot == default)
-                return null;
+            var slot = bosSlotlar
+                .OrderBy(x => DateTime.TryParse(x.BaslangicZamani, out var dt) ? dt : DateTime.MaxValue)
+                .FirstOrDefault();
 
             return slot;
         }

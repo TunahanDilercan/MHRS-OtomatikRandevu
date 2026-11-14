@@ -3,7 +3,7 @@ name: Deploy to Ubuntu Server
 # Kod her push'landiğinda veya manuel olarak çalışır
 on:
   push:
-    branches: [ main ]
+    branches: [ master ]
   workflow_dispatch:
 
 jobs:
@@ -37,7 +37,7 @@ jobs:
           sudo systemctl stop mhrs-bot || true
           
           # Yeni kodu çek
-          git pull origin main
+          git pull origin master
           
           # Yeniden derle
           dotnet build
