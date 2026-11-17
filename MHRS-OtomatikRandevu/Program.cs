@@ -34,7 +34,7 @@ namespace MHRS_OtomatikRandevu
 
         static IClientService? _client;
         static INotificationService? _notificationService;
-        static bool IsWithinAllowedWindow(DateTime t)
+        internal static bool IsWithinAllowedWindow(DateTime t)
         {
             // Eğer özel saat listesi tanımlıysa sadece o saatleri kontrol et
             if (ENV_SCHEDULE_TIMES.Count > 0)
