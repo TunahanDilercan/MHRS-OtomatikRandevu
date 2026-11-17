@@ -9,6 +9,9 @@ namespace MHRS_OtomatikRandevu
         /// <summary>FARKETMEZ anlamındaki ID.</summary>
         public const int Any = -1;
 
+        /// <summary>MHRS_AUTH_MODE=token: şifreyle hiç giriş yapma; tarayıcıdan alınan oturumu (/token) kullan.</summary>
+        public bool TokenMode { get; private set; }
+
         public string Tc { get; private set; } = "";
         public string Password { get; private set; } = "";
 
@@ -48,9 +51,14 @@ namespace MHRS_OtomatikRandevu
             var errors = new List<string>();
             string? Val(string key) => string.IsNullOrWhiteSpace(get(key)) ? null : get(key)!.Trim();
 
+            var authMode = (Val("MHRS_AUTH_MODE") ?? "password").ToLowerInvariant();
+            if (authMode != "password" && authMode != "token")
+                errors.Add($"MHRS_AUTH_MODE 'password' veya 'token' olmalı: '{authMode}'");
+            c.TokenMode = authMode == "token";
+
             c.Tc = Val("MHRS_TC") ?? "";
             c.Password = Val("MHRS_PASSWORD") ?? "";
-            if (c.Tc == "" || c.Password == "")
+            if (!c.TokenMode && (c.Tc == "" || c.Password == ""))
                 errors.Add("MHRS_TC veya MHRS_PASSWORD bulunamadı. Lütfen .env dosyasını kontrol edin.");
 
             // İl zorunlu

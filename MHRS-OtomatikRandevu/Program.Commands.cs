@@ -1,4 +1,5 @@
 using System.Globalization;
+using MHRS_OtomatikRandevu.Utils;
 
 namespace MHRS_OtomatikRandevu
 {
@@ -20,7 +21,12 @@ namespace MHRS_OtomatikRandevu
             "/duraklat - aramayı duraklat\n" +
             "/devam - aramaya devam et\n" +
             "/tarih GG-AA-YYYY [GG-AA-YYYY] - tarih aralığını değiştir (tek tarih = sadece o gün)\n" +
-            "/hedef - aranan il/klinik/hastane/doktor ID'leri";
+            "/hedef - aranan il/klinik/hastane/doktor ID'leri\n" +
+            "/token <değer> - (token modu) tarayıcıdaki MHRS oturumunu bota ver\n\n" +
+            "Token nasıl alınır (bilgisayarda): mhrs.gov.tr'ye e-Nabız/e-Devlet ile girin → F12 → Console'a\n" +
+            "copy(localStorage.getItem('token-v-mhrs'))\n" +
+            "yazın → panodaki U2FsdGVkX1... değerini /token ile gönderin. Göndermeden önce mhrs.gov.tr'den ÇIKIŞ YAPMAYIN; " +
+            "sonra telefondan/tarayıcıdan tekrar MHRS'ye girerseniz botun oturumu düşer.";
 
         /// <summary>"/tarih@BotAdi 18-11-2026" → ("tarih", ["18-11-2026"]). Komut değilse null.</summary>
         internal static (string Command, string[] Args)? ParseCommand(string? text)
@@ -106,7 +112,8 @@ namespace MHRS_OtomatikRandevu
                            $"Deneme: {STATE_ATTEMPTS} (toplam hata: {STATE_ERRORS_TOTAL})\n" +
                            $"Son deneme: {last} → {STATE_LAST_RESULT}\n" +
                            $"Tarih: {DateRangeText()}\n" +
-                           $"Mod: {(CONTINUOUS ? "sürekli" : "saat pencereleri")}, her {INTERVAL_SECONDS} sn";
+                           $"Mod: {(CONTINUOUS ? "sürekli" : "saat pencereleri")}, her {INTERVAL_SECONDS} sn" +
+                           (TOKEN_MODE ? $"\nOturum (token) geçerlilik: {TOKEN_END_DATE:dd.MM HH:mm}" : "");
 
                 case "duraklat":
                 case "durdur":
@@ -127,6 +134,17 @@ namespace MHRS_OtomatikRandevu
                     SetDateRange(s, e);
                     LogStatus($"Telegram: tarih aralığı değişti -> {s:dd.MM.yyyy} - {e:dd.MM.yyyy}", null, true);
                     return $"📅 Yeni tarih aralığı: {s:dd.MM.yyyy} - {e:dd.MM.yyyy}\nSadece bu aralıktaki randevular alınır; bitince bot durur.";
+
+                case "token":
+                    if (!TOKEN_MODE)
+                        return "Bu komut yalnızca MHRS_AUTH_MODE=token iken kullanılır.";
+                    if (args.Length != 1)
+                        return "Kullanım: /token <U2FsdGVkX1... veya eyJ... değeri>";
+                    if (!MhrsTokenUtil.TryExtractJwt(args[0], DateTime.Now, out var jwt, out var terr))
+                        return "❌ " + terr;
+                    File.WriteAllText(TokenFilePath, jwt);
+                    LogStatus("Telegram: yeni oturum (token) alındı", null, true);
+                    return $"✅ Oturum alındı, {JwtTokenUtil.GetTokenExpireTime(jwt):dd.MM HH:mm}'e kadar geçerli.\nGüvenlik için bu sohbetteki /token mesajınızı silin.";
 
                 case "hedef":
                     var t = CURRENT_TARGET;
