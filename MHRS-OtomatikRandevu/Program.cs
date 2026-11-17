@@ -38,6 +38,7 @@ namespace MHRS_OtomatikRandevu
 
         static string? QUERY_START;   // MHRS slot sorgusu başlangıcı (yyyy-MM-dd HH:mm:ss)
         static string? QUERY_END;     // MHRS slot sorgusu bitişi
+        static bool DAILY_REPORT = true;
 
         static void Main(string[] args)
         {
@@ -98,6 +99,12 @@ namespace MHRS_OtomatikRandevu
             var target = ResolveTarget(cfg);
             if (target == null)
                 return;   // hata mesajı ResolveTarget içinde yazıldı
+            CURRENT_TARGET = target;
+
+            // Telegram komutları (isteğe bağlı): yalnızca kayıtlı sohbetten gelen komutlar işlenir
+            var tg = _notificationService as NotificationService;
+            if (cfg.TelegramCommands && tg != null && !string.IsNullOrEmpty(tg.TELEGRAM_BOT_TOKEN) && !string.IsNullOrEmpty(tg.TELEGRAM_CHAT_ID))
+                new TelegramCommandListener(tg.TELEGRAM_BOT_TOKEN!, tg.TELEGRAM_CHAT_ID!, HandleCommand, tg.SendNotification).Start();
 
             RunSearchLoop(target);
         }
@@ -124,11 +131,15 @@ namespace MHRS_OtomatikRandevu
             CONTINUOUS = cfg.Continuous;
             INTERVAL_SECONDS = cfg.IntervalSeconds;
             ENV_SCHEDULE_TIMES = cfg.ScheduleTimes;
-            ENV_START_DATE = cfg.StartDate.ToString("dd-MM-yyyy");
-            SLOT_MIN = cfg.StartDate;
-            SLOT_MAX = cfg.EndDate ?? DateTime.MaxValue;
-            QUERY_START = cfg.StartDate.ToString("yyyy-MM-dd HH:mm:ss");
-            QUERY_END = (cfg.EndDate ?? DateTime.Now.AddDays(12)).ToString("yyyy-MM-dd HH:mm:ss");   // bitiş yoksa bugünden 12 gün
+            DAILY_REPORT = cfg.DailyReport;
+            lock (DATE_LOCK)
+            {
+                ENV_START_DATE = cfg.StartDate.ToString("dd-MM-yyyy");
+                SLOT_MIN = cfg.StartDate;
+                SLOT_MAX = cfg.EndDate ?? DateTime.MaxValue;
+                QUERY_START = cfg.StartDate.ToString("yyyy-MM-dd HH:mm:ss");
+                QUERY_END = (cfg.EndDate ?? DateTime.Now.AddDays(12)).ToString("yyyy-MM-dd HH:mm:ss");   // bitiş yoksa bugünden 12 gün
+            }
         }
     }
 }
