@@ -40,45 +40,22 @@ run_step() {
     fi
 }
 
-# 1. SDK Kontrol
-if ! command -v dotnet &> /dev/null; then
-    echo -e "${RED}[UYARI]${NC} .NET SDK bulunamadı! Otomatik yükleniyor..."
-    
-    if [ -f /etc/os-release ]; then
-        . /etc/os-release
-        if [[ "$ID" == "ubuntu" || "$ID" == "debian" ]]; then
-             UBUNTU_VERSION="${VERSION_ID:-22.04}"
-             if [[ "$UBUNTU_VERSION" != "20.04" && "$UBUNTU_VERSION" != "22.04" && "$UBUNTU_VERSION" != "24.04" ]]; then
-                 UBUNTU_VERSION="22.04"
-             fi
+# 1. SDK Kontrol (.NET 10 gerekli)
+has_sdk10() { command -v dotnet &> /dev/null && dotnet --list-sdks 2>/dev/null | grep -q '^10\.'; }
 
-             run_step "Microsoft anahtarları ekleniyor" "wget https://packages.microsoft.com/config/ubuntu/$UBUNTU_VERSION/packages-microsoft-prod.deb -O packages-microsoft-prod.deb && dpkg -i packages-microsoft-prod.deb && rm packages-microsoft-prod.deb"
-             run_step "Paket listesi güncelleniyor" "apt-get update"
-
-             echo -ne "${BLUE}[INFO]${NC} .NET SDK yükleniyor... "
-             if apt-get install -y dotnet-sdk-8.0 > /tmp/mhrs_install.log 2>&1; then
-                 echo -e "${GREEN}BAŞARILI (.NET 8.0)${NC}"
-             elif apt-get install -y dotnet-sdk-7.0 > /tmp/mhrs_install.log 2>&1; then
-                 echo -e "${GREEN}BAŞARILI (.NET 7.0)${NC}"
-             else
-                 echo -e "${RED}HATA${NC}"
-                 echo -e "\n${RED}!!! Kurulum sırasında bir hata oluştu !!!${NC}"
-                 echo "----------------------------------------"
-                 cat /tmp/mhrs_install.log
-                 echo "----------------------------------------"
-                 echo "Çözüm için yukarıdaki hatayı kontrol edin."
-                 exit 1
-             fi
-        else
-            echo "Bu sistem için otomatik kurulum desteklenmiyor. Lütfen .NET 7 SDK manuel kurun."
-            exit 1
-        fi
-    else
-        echo "İşletim sistemi algılanamadı."
-        exit 1
-    fi
+if has_sdk10; then
+    echo -e "${GREEN}[OK]${NC} .NET 10 SDK zaten yüklü."
 else
-    echo -e "${GREEN}[OK]${NC} .NET SDK zaten yüklü."
+    echo -e "${RED}[UYARI]${NC} .NET 10 SDK bulunamadı! Otomatik yükleniyor..."
+    # Önce dağıtımın paket deposu, olmazsa Microsoft'un resmi kurulum betiği (her Linux'ta çalışır)
+    if command -v apt-get &> /dev/null && apt-get update > /tmp/mhrs_install.log 2>&1 \
+        && apt-get install -y dotnet-sdk-10.0 >> /tmp/mhrs_install.log 2>&1 && has_sdk10; then
+        echo -e "${GREEN}[OK]${NC} .NET 10 SDK apt ile kuruldu."
+    else
+        run_step ".NET 10 SDK resmi betikle kuruluyor" \
+            "curl -sSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh && bash /tmp/dotnet-install.sh --channel 10.0 --install-dir /usr/share/dotnet && ln -sf /usr/share/dotnet/dotnet /usr/bin/dotnet"
+        has_sdk10 || { echo -e "${RED}[HATA]${NC} .NET 10 SDK kurulamadı."; exit 1; }
+    fi
 fi
 
 # 2. Proje Derleme
@@ -94,7 +71,12 @@ echo -e "\n--- Proje Hazırlanıyor ---"
 run_step "Bağımlılıklar yükleniyor" "dotnet restore"
 
 # Publish (Derleme ve Çıktı Alma)
-run_step "Uygulama derleniyor ve hazırlanıyor" "dotnet publish --configuration Release --nologo -v q -o bin/publish"
+# Sunucu mimarisine göre self-contained tek dosya: çalıştırmak için ayrıca .NET runtime gerekmez
+case "$(uname -m)" in
+    aarch64|arm64) RID=linux-arm64 ;;
+    *) RID=linux-x64 ;;
+esac
+run_step "Uygulama derleniyor ve hazırlanıyor ($RID)" "dotnet publish --configuration Release -r $RID --self-contained true -p:PublishSingleFile=true --nologo -v q -o bin/publish"
 
 # Scriptleri yetkilendir
 chmod +x *.sh 2>/dev/null
