@@ -16,6 +16,14 @@ namespace MHRS_OtomatikRandevu
         static string? TC_NO;
         static string? SIFRE;
         static int TELEGRAM_NOTIFY_FREQUENCY = 10;
+        // Tarih aralığı: yalnızca bu aralıktaki (ve geçmemiş) slotlar alınır.
+        // SLOT_MAX yalnızca MHRS_END_DATE verilmişse sınırlıdır; geçince bot durur.
+        static DateTime SLOT_MIN = DateTime.MinValue;
+        static DateTime SLOT_MAX = DateTime.MaxValue;
+        // MHRS_CONTINUOUS=1: saat pencerelerini beklemeden sürekli ara
+        static bool CONTINUOUS = false;
+        // Normal modda iki deneme arası bekleme (sn). Varsayılan 120 = önceki davranış.
+        static int INTERVAL_SECONDS = 120;
         static string? ENV_START_DATE;
         static List<string> ENV_SCHEDULE_TIMES = new();
 
@@ -158,6 +166,16 @@ namespace MHRS_OtomatikRandevu
             var telegramFreq = Environment.GetEnvironmentVariable("TELEGRAM_NOTIFY_FREQUENCY");
             if (!string.IsNullOrEmpty(telegramFreq) && int.TryParse(telegramFreq, out int freq))
                 TELEGRAM_NOTIFY_FREQUENCY = freq;
+
+            CONTINUOUS = Environment.GetEnvironmentVariable("MHRS_CONTINUOUS")?.Trim() == "1";
+            var intervalRaw = Environment.GetEnvironmentVariable("MHRS_INTERVAL_SECONDS");
+            if (!string.IsNullOrWhiteSpace(intervalRaw))
+            {
+                if (int.TryParse(intervalRaw.Trim(), out int iv) && iv >= 30)
+                    INTERVAL_SECONDS = iv;
+                else
+                    Console.WriteLine($"[UYARI] MHRS_INTERVAL_SECONDS geçersiz veya 30'dan küçük ('{intervalRaw}'), {INTERVAL_SECONDS} sn kullanılıyor.");
+            }
 
             // Zamanlama ayarlarını oku
             var scheduleTimes = Environment.GetEnvironmentVariable("MHRS_SCHEDULE_TIMES");
@@ -458,53 +476,39 @@ namespace MHRS_OtomatikRandevu
                 return;
             }
 
-            // Tarih Seçim Bölümü
+            // Tarih Seçim Bölümü (GG-AA-YYYY). Geçersiz tarih sessizce varsayılana düşmez, bot durur.
             string? startDate;
             string? endDate;
 
-            // .env'den başlangıç tarihi oku
             var envStartDate = Environment.GetEnvironmentVariable("MHRS_START_DATE");
-            if (!string.IsNullOrEmpty(envStartDate))
+            DateTime startDt = DateTime.Today;
+            if (!string.IsNullOrWhiteSpace(envStartDate) && !TryParseTrDate(envStartDate, out startDt))
             {
-                try
-                {
-                    var dateArr = envStartDate.Split('-').Select(x => Convert.ToInt32(x)).ToArray();
-                    var date = new DateTime(dateArr[2], dateArr[1], dateArr[0]);
-                    startDate = date.ToString("yyyy-MM-dd HH:mm:ss");
-                }
-                catch
-                {
-                    // Geçersizse bugünden başla
-                    startDate = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
-                }
+                ExitWith(2, $"[ERROR] MHRS_START_DATE geçersiz: '{envStartDate}' (biçim: GG-AA-YYYY)", notify: false);
+                return;
             }
-            else
-            {
-                // .env'de MHRS_START_DATE yoksa bugünden başla
-                startDate = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
-            }
+            startDate = startDt.ToString("yyyy-MM-dd HH:mm:ss");
 
-            // Bitiş tarihi - MHRS_END_DATE env değişkenini kontrol et
             var envEndDate = Environment.GetEnvironmentVariable("MHRS_END_DATE");
-            if (!string.IsNullOrEmpty(envEndDate))
+            DateTime endDt = DateTime.Now.AddDays(12);   // bitiş verilmezse: bugünden 12 gün
+            bool hasEndDate = !string.IsNullOrWhiteSpace(envEndDate);
+            if (hasEndDate)
             {
-                try
+                if (!TryParseTrDate(envEndDate!, out var endDay))
                 {
-                    var endDateArr = envEndDate.Split('-').Select(x => Convert.ToInt32(x)).ToArray();
-                    var endDateParsed = new DateTime(endDateArr[2], endDateArr[1], endDateArr[0]);
-                    endDate = endDateParsed.ToString("yyyy-MM-dd HH:mm:ss");
+                    ExitWith(2, $"[ERROR] MHRS_END_DATE geçersiz: '{envEndDate}' (biçim: GG-AA-YYYY)", notify: false);
+                    return;
                 }
-                catch
+                endDt = endDay.Date.AddDays(1).AddSeconds(-1);   // bitiş günü dahil (23:59:59)
+                if (endDt < startDt)
                 {
-                    // Geçersizse varsayılan olarak bugünden 12 gün sonrası
-                    endDate = DateTime.Now.AddDays(12).ToString("yyyy-MM-dd HH:mm:ss");
+                    ExitWith(2, $"[ERROR] MHRS_END_DATE ({envEndDate}) başlangıç tarihinden ({envStartDate}) önce.", notify: false);
+                    return;
                 }
             }
-            else
-            {
-                // .env'de MHRS_END_DATE yoksa varsayılan olarak bugünden 12 gün sonrası
-                endDate = DateTime.Now.AddDays(12).ToString("yyyy-MM-dd HH:mm:ss");
-            }
+            endDate = endDt.ToString("yyyy-MM-dd HH:mm:ss");
+            SLOT_MIN = startDt;
+            SLOT_MAX = hasEndDate ? endDt : DateTime.MaxValue;
 
             #region Randevu Alım Bölümü
             ConsoleUtil.WriteText("Yapmış olduğunuz seçimler doğrultusunda müsait olan ilk randevu otomatik olarak alınacaktır.", 3000);
@@ -516,6 +520,11 @@ namespace MHRS_OtomatikRandevu
             Console.WriteLine($"Hastane({hospitalIndex}) Yer({placeIndex}) Doktor({doctorIndex})");
             Console.WriteLine($"Tarih Aralığı: {ENV_START_DATE} - {endDate}");
             Console.WriteLine($"Telegram Bildirimi: Her {TELEGRAM_NOTIFY_FREQUENCY} denemede bir");
+            Console.WriteLine(CONTINUOUS
+                ? $"Arama Modu: Sürekli (her {INTERVAL_SECONDS} sn)"
+                : $"Arama Modu: Saat pencereleri (pencere içinde her {INTERVAL_SECONDS} sn)");
+            if (SLOT_MAX != DateTime.MaxValue)
+                Console.WriteLine($"Bot {SLOT_MAX:dd.MM.yyyy HH:mm} sonrasında kendini durduracak.");
             Console.WriteLine("=====================================");
             Console.WriteLine("Bot çalışıyor... (Sadece önemli olaylar gösterilecek)");
             Console.WriteLine();
@@ -540,6 +549,12 @@ namespace MHRS_OtomatikRandevu
 
             while (!appointmentState)
             {
+                if (DateTime.Now > SLOT_MAX)
+                {
+                    ExitWith(2, $"⌛ MHRS Bot durdu: hedef tarih aralığı geçti ({SLOT_MAX:dd.MM.yyyy}). {attemptCount} denemede randevu bulunamadı.", notify: true);
+                    return;
+                }
+
                 // İlk başlatmada her zaman çalış, sonra belirlenen saatlerde çalış
                 if (!firstTestDone || attemptCount <= 5) // İlk 5 deneme sürekli (3 dakikada bir = 15 dakika)
                 {
@@ -558,7 +573,7 @@ namespace MHRS_OtomatikRandevu
                 else
                 {
                     // 5. denemeden sonra belirlenen saat aralıklarında çalış
-                    if (!IsWithinAllowedWindow(DateTime.Now))
+                    if (!CONTINUOUS && !IsWithinAllowedWindow(DateTime.Now))
                     {
                         if (attemptCount % 30 == 0) // Her 30 denemede bir konsola göster
                         {
@@ -739,8 +754,8 @@ namespace MHRS_OtomatikRandevu
                             Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] Deneme #{attemptCount} - Müsait randevu bulunamadı");
                         }
                         
-                        // Normal bekleme süresi
-                        Thread.Sleep(TimeSpan.FromMinutes(1));
+                        // Normal bekleme süresi (MHRS_INTERVAL_SECONDS, varsayılan 120 sn)
+                        Thread.Sleep(TimeSpan.FromSeconds(INTERVAL_SECONDS));
                     }
                     
                     // Telegram bildirim frekansına göre "randevu bulunamadı" bildirimi gönder (normal modda - 5. denemeden sonra)
@@ -757,7 +772,7 @@ namespace MHRS_OtomatikRandevu
                         _ = Task.Run(() => _notificationService.SendNotification(statusMessage));
                     }
                     
-                    Thread.Sleep(TimeSpan.FromMinutes(1));
+                    // Bekleme yukarıdaki dallarda yapıldı (ilk 5 deneme: 3 dk, sonrası: INTERVAL_SECONDS)
                     continue;
                 }
 
@@ -1008,9 +1023,20 @@ namespace MHRS_OtomatikRandevu
                 return new SlotSearchResult(null, true, kod ?? "BAGLANTI", mesaj ?? "MHRS'den yanıt alınamadı");
             }
 
-            // Tüm hekim / muayene yeri / gün kombinasyonlarındaki boş slotları topla
-            // ve başlangıç zamanına göre EN ERKEN olanı seç
-            var bosSlotlar = slotListResponse.Data
+            var slot = SelectEarliestSlot(slotListResponse.Data, SLOT_MIN, SLOT_MAX, DateTime.Now);
+            return new SlotSearchResult(slot);
+        }
+
+        /// <summary>
+        /// Tüm hekim / muayene yeri / gün kombinasyonlarındaki boş slotlardan, [min, max] aralığında
+        /// olan ve henüz geçmemiş EN ERKEN slotu seçer. Yan etkisi yoktur (test edilebilir).
+        /// </summary>
+        internal static SubSlot? SelectEarliestSlot(IEnumerable<SlotResponseModel>? data, DateTime min, DateTime max, DateTime now)
+        {
+            if (data == null)
+                return null;
+
+            return data
                 .Where(r => r?.HekimSlotList != null)
                 .SelectMany(r => r.HekimSlotList)
                 .Where(h => h?.MuayeneYeriSlotList != null)
@@ -1020,14 +1046,17 @@ namespace MHRS_OtomatikRandevu
                 .Where(g => g != null && g.Bos && g.SlotList != null)
                 .SelectMany(g => g.SlotList)
                 .Where(x => x != null && x.Bos && x.SubSlot != null)
-                .Select(x => x.SubSlot);
-
-            var slot = bosSlotlar
-                .OrderBy(x => DateTime.TryParse(x.BaslangicZamani, out var dt) ? dt : DateTime.MaxValue)
+                .Select(x => (Slot: x.SubSlot, Ok: DateTime.TryParse(x.SubSlot.BaslangicZamani, CultureInfo.InvariantCulture, DateTimeStyles.None, out var dt), Time: dt))
+                .Where(t => t.Ok && t.Time >= min && t.Time <= max && t.Time > now)
+                .OrderBy(t => t.Time)
+                .Select(t => t.Slot)
                 .FirstOrDefault();
-
-            return new SlotSearchResult(slot);
         }
+
+        /// <summary>GG-AA-YYYY (ör. 18-11-2026 veya 8-1-2026) biçimindeki tarihi okur.</summary>
+        internal static bool TryParseTrDate(string? text, out DateTime date) =>
+            DateTime.TryParseExact(text?.Trim(), new[] { "dd-MM-yyyy", "d-M-yyyy" },
+                CultureInfo.InvariantCulture, DateTimeStyles.None, out date);
 
         static bool MakeAppointment(IClientService client, AppointmentRequestModel appointmentRequestModel, bool sendNotification)
         {
@@ -1449,7 +1478,12 @@ MHRS OTO RANDEVU - KURULUM SİHİRBAZI
                var parts = mhrsStartDate.Split('-');
                startDt = new DateTime(int.Parse(parts[2]), int.Parse(parts[1]), int.Parse(parts[0]));
             }
-            catch { startDt = DateTime.Now; }
+            catch
+            {
+                Console.WriteLine($"[UYARI] '{mhrsStartDate}' geçersiz, bugün kullanılıyor.");
+                startDt = DateTime.Now;
+                mhrsStartDate = startDt.ToString("dd-MM-yyyy");
+            }
             DateTime endDt = startDt.AddDays(daysToAdd);
             string mhrsEndDate = endDt.ToString("dd-MM-yyyy");
             
@@ -1473,6 +1507,10 @@ MHRS OTO RANDEVU - KURULUM SİHİRBAZI
                  // Hızlı Modda kullanıcıya sormadan eski ayarı veya boşu kullan
                  Console.WriteLine($"\n[BİLGİ] Saat zamanlaması eski ayarlardan yüklendi ({ (string.IsNullOrEmpty(schedule) ? "Akıllı Mod" : schedule) })");
             }
+
+            Console.WriteLine("\nSaat pencerelerini beklemeden SÜREKLİ arasın mı? (kısa tarih aralıkları için önerilir) (e/H)");
+            Console.Write("Sürekli mod: ");
+            string continuous = Console.ReadLine()?.Trim().ToLower().StartsWith("e") == true ? "1" : "0";
 
             // 9. TELEGRAM BİLDİRİM AYARLARI
             string telegramToken = existingTelToken;
@@ -1524,6 +1562,10 @@ MHRS_START_DATE={mhrsStartDate}
 MHRS_END_DATE={mhrsEndDate}
 # Özel zamanlama (Boş ise akıllı mod çalışır)
 MHRS_SCHEDULE_TIMES={schedule}
+# 1 = saat pencerelerini beklemeden sürekli ara. Bitiş tarihi geçince bot kendini durdurur.
+MHRS_CONTINUOUS={continuous}
+# İki deneme arası bekleme (sn, en az 30)
+MHRS_INTERVAL_SECONDS=120
 
 # BİLDİRİM AYARLARI (Opsiyonel)
 TELEGRAM_BOT_TOKEN={telegramToken}
