@@ -110,3 +110,65 @@ public class HedefEslemeTests
         Assert.Null(Program.MatchOptionalId(99999, new[] { 31655, 2783, 34448 }));
     }
 }
+
+public class JwtTests
+{
+    [Fact]
+    public void Exp_alani_okunur()
+    {
+        // header.payload.imza — payload: {"exp":1795000000} (base64url, dolgu yok)
+        var payload = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("{\"sub\":\"x\",\"exp\":1795000000}"))
+            .TrimEnd('=').Replace('+', '-').Replace('/', '_');
+        var token = $"eyJhbGciOiJIUzI1NiJ9.{payload}.imza";
+
+        var exp = JwtTokenUtil.GetTokenExpireTime(token);
+
+        Assert.Equal(DateTimeOffset.FromUnixTimeSeconds(1795000000).LocalDateTime, exp);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("noktasiz")]
+    [InlineData("a.bozuk!!.c")]
+    public void Bozuk_token_MinValue(string token)
+    {
+        Assert.Equal(DateTime.MinValue, JwtTokenUtil.GetTokenExpireTime(token));
+    }
+}
+
+public class LogRotationTests
+{
+    [Fact]
+    public void Sinir_asilinca_kaydirilir_en_eski_silinir()
+    {
+        var dir = Directory.CreateTempSubdirectory("mhrslog");
+        try
+        {
+            var log = Path.Combine(dir.FullName, "randevu_log.txt");
+            File.WriteAllText(log, "yeni-ve-buyuk");
+            File.WriteAllText(log + ".1", "bir");
+            File.WriteAllText(log + ".2", "iki");
+
+            Program.RotateLogIfNeeded(log, maxBytes: 5, keep: 2);
+
+            Assert.False(File.Exists(log));
+            Assert.Equal("yeni-ve-buyuk", File.ReadAllText(log + ".1"));
+            Assert.Equal("bir", File.ReadAllText(log + ".2"));   // "iki" silindi
+        }
+        finally { dir.Delete(true); }
+    }
+
+    [Fact]
+    public void Sinirin_altinda_dokunulmaz()
+    {
+        var dir = Directory.CreateTempSubdirectory("mhrslog");
+        try
+        {
+            var log = Path.Combine(dir.FullName, "randevu_log.txt");
+            File.WriteAllText(log, "kucuk");
+            Program.RotateLogIfNeeded(log, maxBytes: 1000);
+            Assert.Equal("kucuk", File.ReadAllText(log));
+        }
+        finally { dir.Delete(true); }
+    }
+}
