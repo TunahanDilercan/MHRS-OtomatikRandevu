@@ -28,6 +28,24 @@ namespace MHRS_OtomatikRandevu
         }
 
 
+        const long LOG_MAX_BYTES = 5 * 1024 * 1024;   // 5 MB
+        const int LOG_KEEP = 3;                       // randevu_log.txt.1 .. .3
+
+        /// <summary>Log dosyası 5 MB'ı geçince .1, .2, .3 olarak kaydırır (en eskisi silinir).</summary>
+        internal static void RotateLogIfNeeded(string logPath, long maxBytes = LOG_MAX_BYTES, int keep = LOG_KEEP)
+        {
+            var fi = new FileInfo(logPath);
+            if (!fi.Exists || fi.Length < maxBytes)
+                return;
+            for (int i = keep; i >= 1; i--)
+            {
+                var src = i == 1 ? logPath : $"{logPath}.{i - 1}";
+                var dst = $"{logPath}.{i}";
+                if (File.Exists(src))
+                    File.Move(src, dst, overwrite: true);
+            }
+        }
+
         static void LogStatus(string status, string? slotTime = null, bool showConsole = false)
         {
             var logPath = Path.Combine(Directory.GetCurrentDirectory(), LOG_FILE_NAME);
@@ -39,6 +57,7 @@ namespace MHRS_OtomatikRandevu
             // Dosyaya her zaman yaz
             try
             {
+                RotateLogIfNeeded(logPath);
                 File.AppendAllText(logPath, logLine + Environment.NewLine);
             }
             catch

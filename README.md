@@ -17,7 +17,7 @@ chmod +x *.sh
 ```
 
 ### 2. İlk Kurulum
-Gerekli paketleri (.NET SDK) kurmak ve projeyi hazırlamak için:
+Gerekli paketleri (.NET 10 SDK) kurmak ve projeyi hazırlamak için:
 ```bash
 ./setup.sh
 ```
@@ -76,11 +76,28 @@ sudo ./manager.sh
 
 ---
 
+## Başka Bir Bilgisayardan Sunucuya Yükleme (`deploy.sh`)
+
+Sunucuya .NET kurmadan, yerelde derleyip tek dosya olarak göndermek için. Her hedef (ör. `konya`) sunucuda ayrı bir klasör (`/opt/mhrs-konya`) ve ayrı bir servis (`mhrs-konya`) olarak çalışır; aynı sunucudaki başka uygulamalara dokunulmaz.
+
+```bash
+export MHRS_SSH_HOST=sunucu-ip MHRS_SSH_PORT=22 MHRS_SSH_KEY=~/.ssh/anahtar
+./deploy.sh konya --yeni   # ilk kez: klasör + servis oluşturur, sonra .env'i koyup başlatın
+./deploy.sh konya          # güncelleme: test, derleme, yükleme, yeniden başlatma, sağlık kontrolü
+```
+Eski sürüm sunucuda `MHRS-OtomatikRandevu.eski` olarak saklanır.
+
+## Geliştirme
+
+```bash
+dotnet test MHRS-OtomatikRandevu.Tests   # birim testleri (GitHub Actions'ta her PR'da da çalışır)
+```
+
 ## Dosya Yapısı
 
 *   `manager.sh`: Ana yönetim paneli.
 *   `.env`: Yapılandırma ve ayar dosyası.
-*   `randevu_log.txt`: İşlem kayıtları (Loglar).
+*   `randevu_log.txt`: İşlem kayıtları (Loglar). 5 MB'ı geçince `.1`–`.3` olarak döndürülür.
 *   `randevu_basarili.txt`: Alınan son başarılı randevu bilgisi.
 
 ---
