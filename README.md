@@ -42,11 +42,26 @@ Randevu alındığında anında bildirim almak için Telegram botu kurmanız ön
 | `MHRS_CONTINUOUS` | `1` = saat pencerelerini beklemeden sürekli ara (kısa tarih aralıkları için). Varsayılan `0`. |
 | `MHRS_INTERVAL_SECONDS` | İki deneme arası bekleme (sn, en az 30). Varsayılan `120`. |
 
+| `MHRS_DOCTOR_ID` | Tek ID, `-1` (farketmez) veya virgülle birden fazla doktor (`34448,2783`): her denemede hepsine bakılır, en erken randevu alınır. |
+| `TELEGRAM_COMMANDS` | `1` = Telegram komutlarını dinle (aşağıya bakın). Aynı bot token'ını kullanan yalnızca **bir** bot dinleyebilir. |
+| `TELEGRAM_DAILY_REPORT` | `0` = her sabah 09:00 durum özetini kapat. Varsayılan açık. |
+
 **Sadece tek bir gün için randevu:** `MHRS_START_DATE` ve `MHRS_END_DATE`'i aynı güne, `MHRS_CONTINUOUS=1` yapın.
 
 Bulunan slot tarih aralığının dışındaysa veya saati geçmişse **alınmaz**.
 
-### 5. Çıkış Kodları (servis davranışı)
+### 5. Telegram Komutları (`TELEGRAM_COMMANDS=1`)
+
+Yalnızca `TELEGRAM_CHAT_ID` sohbetinden gelen komutlar işlenir. Bot yeniden başladığında eski mesajlar tekrar çalıştırılmaz.
+
+| Komut | İşlev |
+| :--- | :--- |
+| `/durum` | Deneme sayısı, son sonuç, tarih aralığı, mod |
+| `/duraklat` · `/devam` | Aramayı beklet / sürdür |
+| `/tarih 18-11-2026` | Sadece o gün; `/tarih 18-11-2026 20-11-2026` aralık. Anında geçerli, bitince bot durur |
+| `/hedef` | Aranan il/klinik/hastane/doktor ID'leri |
+
+### 6. Çıkış Kodları (servis davranışı)
 
 | Kod | Anlamı | systemd |
 | :--- | :--- | :--- |
