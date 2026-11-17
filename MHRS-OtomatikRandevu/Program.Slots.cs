@@ -17,7 +17,51 @@ namespace MHRS_OtomatikRandevu
     {
         //Aynı gün içerisinde tek slot mevcut ise o slotu bulur
         //Aynı gün içerisinde birden fazla slot mevcut ise en yakın saati getirmez fakat en yakın güne ait bir slot getirir
-        record SlotSearchResult(SubSlot? Slot, bool IsError = false, string? ErrorCode = null, string? ErrorMessage = null);
+        internal record SlotSearchResult(SubSlot? Slot, bool IsError = false, string? ErrorCode = null, string? ErrorMessage = null);
+
+        /// <summary>
+        /// Hedefteki her doktor için slot arar (FARKETMEZ ise tek sorgu) ve sonuçları birleştirir.
+        /// Sorgu tarihleri her çağrıda QUERY_START/QUERY_END'den okunur (/tarih komutu anında etkili olur).
+        /// </summary>
+        static SlotSearchResult SearchSlots(SearchTarget target)
+        {
+            string start, end;
+            lock (DATE_LOCK) { start = QUERY_START!; end = QUERY_END!; }
+
+            var results = new List<SlotSearchResult>();
+            foreach (var doctor in target.Doctors)
+            {
+                var request = new SlotRequestModel
+                {
+                    MhrsHekimId = doctor,
+                    MhrsIlId = target.Province,
+                    MhrsIlceId = target.District,
+                    MhrsKlinikId = target.Clinic,
+                    MhrsKurumId = target.Hospital,
+                    MuayeneYeriId = target.Place,
+                    BaslangicZamani = start,
+                    BitisZamani = end
+                };
+                results.Add(GetSlot(_client!, request));
+            }
+            return CombineResults(results);
+        }
+
+        /// <summary>
+        /// Birden fazla sorgunun sonucunu birleştirir: bulunan slotlar arasından en erkeni;
+        /// hiç slot yoksa ve en az bir sorgu "randevu yok" dediyse "yok"; hepsi hata ise ilk hata.
+        /// </summary>
+        internal static SlotSearchResult CombineResults(IReadOnlyList<SlotSearchResult> results)
+        {
+            var found = results.Where(r => r.Slot != null)
+                .OrderBy(r => DateTime.TryParse(r.Slot!.BaslangicZamani, CultureInfo.InvariantCulture, DateTimeStyles.None, out var dt) ? dt : DateTime.MaxValue)
+                .FirstOrDefault();
+            if (found != null)
+                return found;
+            if (results.Count > 0 && results.All(r => r.IsError))
+                return results[0];
+            return new SlotSearchResult(null);
+        }
 
         static SlotSearchResult GetSlot(IClientService client, SlotRequestModel slotRequestModel)
         {

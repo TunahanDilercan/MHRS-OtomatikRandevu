@@ -19,7 +19,8 @@ namespace MHRS_OtomatikRandevu
         public int? ClinicId { get; private set; }
         public int HospitalId { get; private set; } = Any;
         public int PlaceId { get; private set; } = Any;
-        public int DoctorId { get; private set; } = Any;
+        /// <summary>Aranacak doktorlar. [-1] = FARKETMEZ. Birden fazla ise her denemede hepsine bakılır.</summary>
+        public List<int> DoctorIds { get; private set; } = new() { Any };
 
         /// <summary>Aramanın başladığı gün (00:00).</summary>
         public DateTime StartDate { get; private set; }
@@ -30,6 +31,10 @@ namespace MHRS_OtomatikRandevu
         public int IntervalSeconds { get; private set; } = 120;
         public int NotifyFrequency { get; private set; } = 10;
         public List<string> ScheduleTimes { get; private set; } = new();
+        /// <summary>TELEGRAM_COMMANDS=1: /durum, /duraklat, /devam, /tarih, /hedef komutlarını dinle.</summary>
+        public bool TelegramCommands { get; private set; }
+        /// <summary>Her sabah 09:00'da durum özeti (TELEGRAM_DAILY_REPORT=0 ile kapatılır).</summary>
+        public bool DailyReport { get; private set; } = true;
 
         /// <summary>Botu durdurmayan ama kullanıcıya gösterilmesi gereken uyarılar.</summary>
         public List<string> Warnings { get; } = new();
@@ -59,7 +64,16 @@ namespace MHRS_OtomatikRandevu
             // Hastane / muayene yeri / doktor boşsa FARKETMEZ
             c.HospitalId = NormalizeAny(ParseId("MHRS_HOSPITAL_ID", Val("MHRS_HOSPITAL_ID"), errors)) ?? Any;
             c.PlaceId = NormalizeAny(ParseId("MHRS_PLACE_ID", Val("MHRS_PLACE_ID"), errors)) ?? Any;
-            c.DoctorId = NormalizeAny(ParseId("MHRS_DOCTOR_ID", Val("MHRS_DOCTOR_ID"), errors)) ?? Any;
+            var doctorsRaw = Val("MHRS_DOCTOR_ID");
+            if (doctorsRaw != null)
+            {
+                var parts = doctorsRaw.Split(',').Select(x => x.Trim()).Where(x => x != "").ToList();
+                var ids = parts.Select(x => NormalizeAny(ParseId("MHRS_DOCTOR_ID", x, errors))).Where(x => x != null).Select(x => x!.Value).Distinct().ToList();
+                if (ids.Count > 1 && ids.Contains(Any))
+                    errors.Add("MHRS_DOCTOR_ID: -1 (FARKETMEZ) başka doktor ID'leriyle birlikte kullanılamaz.");
+                if (ids.Count > 0)
+                    c.DoctorIds = ids;
+            }
 
             // Tarihler (GG-AA-YYYY)
             c.StartDate = today.Date;
@@ -82,6 +96,8 @@ namespace MHRS_OtomatikRandevu
             }
 
             c.Continuous = Val("MHRS_CONTINUOUS") == "1";
+            c.TelegramCommands = Val("TELEGRAM_COMMANDS") == "1";
+            c.DailyReport = Val("TELEGRAM_DAILY_REPORT") != "0";
 
             var interval = Val("MHRS_INTERVAL_SECONDS");
             if (interval != null)

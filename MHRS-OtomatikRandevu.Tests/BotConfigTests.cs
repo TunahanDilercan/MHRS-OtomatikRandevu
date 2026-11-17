@@ -31,7 +31,7 @@ public class BotConfigTests
         Assert.Equal(-1, c.DistrictId);
         Assert.Equal(144, c.ClinicId);
         Assert.Equal(BotConfig.Any, c.HospitalId);   // boş = FARKETMEZ
-        Assert.Equal(BotConfig.Any, c.DoctorId);
+        Assert.Equal(new[] { BotConfig.Any }, c.DoctorIds);
         Assert.Equal(Today, c.StartDate);
         Assert.Null(c.EndDate);
         Assert.False(c.Continuous);
@@ -56,7 +56,7 @@ public class BotConfigTests
         var (c, _) = Load(("MHRS_DISTRICT_ID", "0"), ("MHRS_HOSPITAL_ID", "0"), ("MHRS_DOCTOR_ID", "0"));
         Assert.Equal(-1, c.DistrictId);
         Assert.Equal(-1, c.HospitalId);
-        Assert.Equal(-1, c.DoctorId);
+        Assert.Equal(new[] { -1 }, c.DoctorIds);
     }
 
     [Fact]

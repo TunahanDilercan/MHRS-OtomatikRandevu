@@ -5,7 +5,10 @@ using MHRS_OtomatikRandevu.Urls;
 namespace MHRS_OtomatikRandevu
 {
     /// <summary>MHRS'de doğrulanmış arama hedefi. -1 = FARKETMEZ.</summary>
-    internal record SearchTarget(int Province, int District, int Clinic, int Hospital, int Place, int Doctor);
+    internal record SearchTarget(int Province, int District, int Clinic, int Hospital, int Place, IReadOnlyList<int> Doctors)
+    {
+        public string DoctorsText => string.Join(",", Doctors);
+    }
 
     // .env'deki il / ilçe / klinik / hastane / muayene yeri / doktor ID'lerini MHRS listeleriyle doğrular
     public partial class Program
@@ -139,15 +142,15 @@ namespace MHRS_OtomatikRandevu
                 return null;
             }
             var doctorList = doctorListResponse.Data;
-            int? doctorIndex = MatchOptionalId(cfg.DoctorId, doctorList.Select(x => x.ValueAsInt));
-            if (doctorIndex == null)
+            var missingDoctors = cfg.DoctorIds.Where(d => MatchOptionalId(d, doctorList.Select(x => x.ValueAsInt)) == null).ToList();
+            if (missingDoctors.Any())
             {
-                Console.WriteLine($"[ERROR] MHRS_DOCTOR_ID={cfg.DoctorId} listede yok. Geçerli seçenekler:");
+                Console.WriteLine($"[ERROR] MHRS_DOCTOR_ID içindeki {string.Join(",", missingDoctors)} listede yok. Geçerli seçenekler:");
                 PrintOptions(doctorList, withAny: true);
                 return null;
             }
 
-            return new SearchTarget(provinceIndex, districtIndex.Value, clinicIndex, hospitalIndex.Value, placeIndex.Value, doctorIndex.Value);
+            return new SearchTarget(provinceIndex, districtIndex.Value, clinicIndex, hospitalIndex.Value, placeIndex.Value, cfg.DoctorIds);
         }
 
         /// <summary>

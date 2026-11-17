@@ -18,9 +18,10 @@ namespace MHRS_OtomatikRandevu
         static void RunSearchLoop(SearchTarget target)
         {
             int provinceIndex = target.Province, districtIndex = target.District, clinicIndex = target.Clinic;
-            int hospitalIndex = target.Hospital, placeIndex = target.Place, doctorIndex = target.Doctor;
-            string startDate = QUERY_START!;
-            string endDate = QUERY_END!;
+            int hospitalIndex = target.Hospital, placeIndex = target.Place;
+            string doctorIndex = target.DoctorsText;
+            // Her sabah 09:00'da bir kez durum özeti; bot 09:00'dan sonra başladıysa ilk rapor ertesi sabah
+            DateTime lastDailyReport = DateTime.Now.Hour >= 9 ? DateTime.Today : DateTime.Today.AddDays(-1);
 
             #region Randevu Alım Bölümü
             ConsoleUtil.WriteText("Yapmış olduğunuz seçimler doğrultusunda müsait olan ilk randevu otomatik olarak alınacaktır.", 3000);
@@ -30,7 +31,7 @@ namespace MHRS_OtomatikRandevu
             Console.WriteLine($"Başlangıç Zamanı: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
             Console.WriteLine($"Arama Kriterleri: İl({provinceIndex}) İlçe({districtIndex}) Klinik({clinicIndex})");
             Console.WriteLine($"Hastane({hospitalIndex}) Yer({placeIndex}) Doktor({doctorIndex})");
-            Console.WriteLine($"Tarih Aralığı: {ENV_START_DATE} - {endDate}");
+            Console.WriteLine($"Tarih Aralığı: {DateRangeText()}");
             Console.WriteLine($"Telegram Bildirimi: Her {TELEGRAM_NOTIFY_FREQUENCY} denemede bir");
             Console.WriteLine(CONTINUOUS
                 ? $"Arama Modu: Sürekli (her {INTERVAL_SECONDS} sn)"
@@ -65,6 +66,20 @@ namespace MHRS_OtomatikRandevu
                 {
                     ExitWith(2, $"⌛ MHRS Bot durdu: hedef tarih aralığı geçti ({SLOT_MAX:dd.MM.yyyy}). {attemptCount} denemede randevu bulunamadı.", notify: true);
                     return;
+                }
+
+                if (DAILY_REPORT && DateTime.Now.Hour >= 9 && lastDailyReport < DateTime.Today && _notificationService != null)
+                {
+                    lastDailyReport = DateTime.Today;
+                    var daily = $"☀️ Günlük durum: bot çalışıyor{(PAUSED ? " (DURAKLATILDI)" : "")}\n\nDeneme: {attemptCount} (toplam hata: {STATE_ERRORS_TOTAL})\nSon sonuç: {STATE_LAST_RESULT}\nTarih: {DateRangeText()}";
+                    _ = Task.Run(() => _notificationService.SendNotification(daily));
+                }
+
+                // /duraklat komutu: aramayı beklet
+                if (PAUSED)
+                {
+                    Thread.Sleep(TimeSpan.FromSeconds(10));
+                    continue;
                 }
 
                 // İlk başlatmada her zaman çalış, sonra belirlenen saatlerde çalış
@@ -111,23 +126,12 @@ namespace MHRS_OtomatikRandevu
                 }
 
                 attemptCount++;
-                var slotRequestModel = new SlotRequestModel
-                {
-                    MhrsHekimId = doctorIndex,
-                    MhrsIlId = provinceIndex,
-                    MhrsIlceId = districtIndex,
-                    MhrsKlinikId = clinicIndex,
-                    MhrsKurumId = hospitalIndex,
-                    MuayeneYeriId = placeIndex,
-                    BaslangicZamani = startDate,
-                    BitisZamani = endDate
-                };
 
                 SubSlot? slot = null;
                 SlotSearchResult? search = null;
                 try
                 {
-                    search = CallWithSessionRecovery(() => GetSlot(_client!, slotRequestModel), $"slot arama #{attemptCount}", notifyRecovery: true);
+                    search = CallWithSessionRecovery(() => SearchSlots(target), $"slot arama #{attemptCount}", notifyRecovery: true);
                     slot = search.Slot;
                 }
                 catch (SessionExpiredException ex)
@@ -155,6 +159,8 @@ namespace MHRS_OtomatikRandevu
                     Thread.Sleep(TimeSpan.FromMinutes(1));
                     continue;
                 }
+                RecordAttempt(attemptCount, search);
+
                 // Gerçek hata ile "randevu yok" ayrımı: hatalar artık sessizce "bulunamadı" sayılmıyor
                 if (search != null && search.IsError)
                 {
