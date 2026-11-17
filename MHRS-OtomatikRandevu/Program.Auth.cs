@@ -15,6 +15,52 @@ namespace MHRS_OtomatikRandevu
     // Giriş, token önbelleği ve giriş hatası işleme
     public partial class Program
     {
+        static void ApplyToken(JwtTokenModel token)
+        {
+            JWT_TOKEN = token.Token;
+            TOKEN_END_DATE = token.Expiration;
+            _client!.AddOrUpdateAuthorizationHeader(JWT_TOKEN);
+        }
+
+        /// <summary>
+        /// İşlemi çalıştırır; MHRS oturumu düşmüşse (LGN2001) bir kez yeniden giriş yapıp tekrar dener.
+        /// Yeniden giriş başarısızsa ExitForLoginFailure ile süreç sonlanır. Yeniden girişten sonra
+        /// oturum yine düşerse SessionExpiredException çağırana iletilir (çoklu giriş vb.).
+        /// Önceden aynı kurtarma kodu 6 yerde kopyalanmıştı.
+        /// </summary>
+        static T CallWithSessionRecovery<T>(Func<T> action, string context, bool notifyRecovery = false)
+        {
+            try
+            {
+                return action();
+            }
+            catch (SessionExpiredException ex)
+            {
+                Console.WriteLine($"[WARNING] 🔄 Oturum düştü ({context}): {ex.Message}");
+                LogStatus($"Oturum düştü ({context}), yeniden giriş deneniyor", null, true);
+
+                var newToken = ForceLogin(_client!);
+                if (newToken == null || string.IsNullOrEmpty(newToken.Token))
+                {
+                    LogStatus($"Oturum kurtarma başarısız ({context})", null, true);
+                    ExitForLoginFailure($"oturum kurtarma: {context}");
+                    throw;   // ExitForLoginFailure süreci sonlandırır; buraya gelinmez
+                }
+
+                ApplyToken(newToken);
+                Console.WriteLine($"[INFO] ✅ Oturum yenilendi, tekrar deneniyor ({context})");
+                LogStatus($"Oturum yenilendi, tekrar deneniyor ({context})", null, true);
+
+                if (notifyRecovery && _notificationService != null)
+                {
+                    var recoveryMessage = $"✅ Session Recovery Başarılı!\n\n🔄 MHRS oturumu otomatik yenilendi\n⏰ Saat: {DateTime.Now:HH:mm:ss}\n📍 {context}\n🎯 Randevu arama devam ediyor...";
+                    _ = Task.Run(() => _notificationService.SendNotification(recoveryMessage));
+                }
+
+                return action();   // ikinci SessionExpiredException çağırana gider
+            }
+        }
+
         static JwtTokenModel? GetToken(IClientService client)
         {
             // Cross-platform token file path

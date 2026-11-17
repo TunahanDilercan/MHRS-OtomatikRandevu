@@ -93,3 +93,20 @@ public class SaatPenceresiTests
                 Assert.False(Program.IsWithinAllowedWindow(new DateTime(2026, 11, 17, h, m, 0)), $"{h:00}:{m:00}");
     }
 }
+
+public class HedefEslemeTests
+{
+    [Theory]
+    [InlineData(-1, -1)]        // FARKETMEZ her zaman geçerli
+    [InlineData(34448, 34448)]  // listede var
+    public void Gecerli_id_eslesir(int env, int beklenen)
+    {
+        Assert.Equal(beklenen, Program.MatchOptionalId(env, new[] { 31655, 2783, 34448 }));
+    }
+
+    [Fact]
+    public void Listede_olmayan_id_null_doner_farketmeze_dusmez()
+    {
+        Assert.Null(Program.MatchOptionalId(99999, new[] { 31655, 2783, 34448 }));
+    }
+}
