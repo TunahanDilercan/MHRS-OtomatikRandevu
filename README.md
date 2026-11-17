@@ -123,6 +123,8 @@ Eski sürüm sunucuda `MHRS-OtomatikRandevu.eski` olarak saklanır.
 
 ## Geliştirme
 
+Yapılan iyileştirmeler, fazlar ve kalan işler: [docs/GELISTIRME-GUNLUGU.md](docs/GELISTIRME-GUNLUGU.md)
+
 ```bash
 dotnet test MHRS-OtomatikRandevu.Tests   # birim testleri (GitHub Actions'ta her PR'da da çalışır)
 ```
