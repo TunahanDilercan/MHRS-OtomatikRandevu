@@ -33,6 +33,27 @@ Randevu alındığında anında bildirim almak için Telegram botu kurmanız ön
 5.  JSON sonucunun içinde `"chat":{"id":123456789...` kısmındaki **ID** numarasını alın.
 6.  Bu bilgileri kurulum sihirbazında ilgili alana girin.
 
+### 4. Tarih ve Arama Modu (`.env`)
+
+| Ayar | Açıklama |
+| :--- | :--- |
+| `MHRS_START_DATE` | `GG-AA-YYYY`. Boşsa bugün. Geçersizse bot başlamaz. |
+| `MHRS_END_DATE` | `GG-AA-YYYY`. Boşsa bugünden 12 gün. Verilirse **o günün sonuna kadarki** slotlar alınır ve tarih geçince bot Telegram'a haber verip **kendini durdurur**. |
+| `MHRS_CONTINUOUS` | `1` = saat pencerelerini beklemeden sürekli ara (kısa tarih aralıkları için). Varsayılan `0`. |
+| `MHRS_INTERVAL_SECONDS` | İki deneme arası bekleme (sn, en az 30). Varsayılan `120`. |
+
+**Sadece tek bir gün için randevu:** `MHRS_START_DATE` ve `MHRS_END_DATE`'i aynı güne, `MHRS_CONTINUOUS=1` yapın.
+
+Bulunan slot tarih aralığının dışındaysa veya saati geçmişse **alınmaz**.
+
+### 5. Çıkış Kodları (servis davranışı)
+
+| Kod | Anlamı | systemd |
+| :--- | :--- | :--- |
+| `0` | Randevu alındı | Yeniden başlatmaz |
+| `1` | Geçici hata (bağlantı, MHRS bakımı) | 60 sn sonra yeniden başlatır |
+| `2` | Kalıcı hata (yanlış şifre, geçersiz ayar), tarih aralığı bitti veya randevu zaten alınmış | **Yeniden başlatmaz** (hesap kilitlenmesin) |
+
 ---
 
 ## Yönetim Paneli
