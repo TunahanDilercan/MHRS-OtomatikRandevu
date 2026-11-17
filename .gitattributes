@@ -61,3 +61,6 @@
 #*.PDF   diff=astextplain
 #*.rtf   diff=astextplain
 #*.RTF   diff=astextplain
+
+# Kabuk betikleri Linux sunucuda calisir: Windows checkout da dahil her zaman LF
+*.sh text eol=lf

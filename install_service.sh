@@ -41,8 +41,14 @@ WorkingDirectory=$PROJECT_DIR
 ExecStart=$PROJECT_DIR/bin/publish/MHRS-OtomatikRandevu
 # Eğer sorun yaşarsanız alttaki satırı açıp üstteki kapatın (Eski yöntem)
 # ExecStart=$DOTNET_PATH run --configuration Release
-Restart=always
-RestartSec=30
+# 0 = randevu alindi, 1 = gecici hata (yeniden baslat), 2 = kalici hata/is bitti (baslatma).
+# Yanlis sifrede surekli yeniden baslayip MHRS hesabini kilitlememesi icin "always" kullanilmaz.
+Restart=on-failure
+RestartSec=60
+RestartPreventExitStatus=2
+StartLimitIntervalSec=3600
+StartLimitBurst=10
+Environment=TZ=Europe/Istanbul
 Environment=DOTNET_CLI_TELEMETRY_OPTOUT=1
 
 [Install]
