@@ -370,3 +370,9 @@ FodyWeavers.xsd
 token.txt
 randevu_log.txt
 randevu_basarili.txt
+
+# Kisisel veriler (TC/sifre iceren dosyalar) - asla commit etme
+.user_history
+Data/
+.env.save*
+.env.backup
