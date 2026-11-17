@@ -61,10 +61,59 @@ namespace MHRS_OtomatikRandevu
             }
         }
 
+        // ---- Token modu (MHRS_AUTH_MODE=token) -------------------------------------------------
+        // Bot şifreyle giriş yapmaz. Kullanıcı mhrs.gov.tr'ye e-Nabız/e-Devlet ile girer, oturumu
+        // /token komutuyla (veya token.txt'yi düzenleyerek) bota verir. Oturum düşer/biterse bot
+        // aramayı duraklatıp yeni oturum bekler; hiçbir zaman şifre denemez.
+        static bool TOKEN_MODE;
+        static bool COMMANDS_ACTIVE;
+        static string? REJECTED_TOKEN;   // MHRS'nin reddettiği (düşmüş) oturum; tekrar kullanılmaz
+
+        static string TokenFilePath => Path.Combine(Directory.GetCurrentDirectory(), TOKEN_FILE_NAME);
+
+        static JwtTokenModel WaitForToken(string reason)
+        {
+            var how = COMMANDS_ACTIVE
+                ? "mhrs.gov.tr'ye e-Nabız veya e-Devlet ile girin, sonra Telegram'dan /token <değer> gönderin (nasıl: /yardim)."
+                : $"Sunucuda {TokenFilePath} dosyasına geçerli oturumu (JWT) yazın.";
+            var msg = $"🔑 Yeni MHRS oturumu gerekli: {reason}\n\n{how}\nO zamana kadar arama duraklatıldı.";
+            Console.WriteLine($"[UYARI] {msg}");
+            LogStatus($"Token bekleniyor: {reason}", null, true);
+            if (_notificationService != null)
+                _ = Task.Run(() => _notificationService.SendNotification(msg));
+
+            var lastNotify = DateTime.Now;
+            while (true)
+            {
+                try
+                {
+                    var t = File.Exists(TokenFilePath) ? File.ReadAllText(TokenFilePath).Trim() : "";
+                    var exp = JwtTokenUtil.GetTokenExpireTime(t);
+                    if (t != "" && t != REJECTED_TOKEN && exp > DateTime.Now.AddMinutes(1))
+                    {
+                        LogStatus($"Yeni oturum alındı (geçerlilik: {exp:dd.MM HH:mm})", null, true);
+                        return new() { Token = t, Expiration = exp };
+                    }
+                }
+                catch { /* dosya yazılırken okunduysa bir sonraki turda tekrar dene */ }
+
+                if (DateTime.Now > SLOT_MAX)
+                    ExitWith(2, $"⌛ MHRS Bot durdu: hedef tarih aralığı oturum beklenirken geçti ({SLOT_MAX:dd.MM.yyyy}).", notify: true);
+
+                if (DateTime.Now - lastNotify > TimeSpan.FromHours(2))
+                {
+                    lastNotify = DateTime.Now;
+                    if (_notificationService != null)
+                        _ = Task.Run(() => _notificationService.SendNotification("⏰ Hatırlatma: " + msg));
+                }
+                Thread.Sleep(TimeSpan.FromSeconds(10));
+            }
+        }
+
         static JwtTokenModel? GetToken(IClientService client)
         {
             // Cross-platform token file path
-            var tokenFilePath = Path.Combine(Directory.GetCurrentDirectory(), TOKEN_FILE_NAME);
+            var tokenFilePath = TokenFilePath;
 
             try
             {
@@ -76,6 +125,9 @@ namespace MHRS_OtomatikRandevu
             }
             catch (Exception)
             {
+                if (TOKEN_MODE)
+                    return WaitForToken("geçerli oturum yok veya süresi doldu");
+
                 var loginRequestModel = new LoginRequestModel
                 {
                     KullaniciAdi = TC_NO,
@@ -102,6 +154,14 @@ namespace MHRS_OtomatikRandevu
         /// </summary>
         static JwtTokenModel? ForceLogin(IClientService client)
         {
+            if (TOKEN_MODE)
+            {
+                // Oturum MHRS tarafından düşürüldü: aynı token'ı tekrar kullanma, yenisini bekle
+                REJECTED_TOKEN = JWT_TOKEN;
+                client.ClearAuthorizationHeader();
+                return WaitForToken("oturum düştü (başka bir cihazdan MHRS'ye girilmiş olabilir)");
+            }
+
             Console.WriteLine("[INFO] 🔄 Session recovery: Forcing fresh login...");
             LogStatus("Session recovery: Forcing fresh login", null, true);
             

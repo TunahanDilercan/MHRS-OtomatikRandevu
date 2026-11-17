@@ -22,6 +22,7 @@ namespace MHRS_OtomatikRandevu
             string doctorIndex = target.DoctorsText;
             // Her sabah 09:00'da bir kez durum özeti; bot 09:00'dan sonra başladıysa ilk rapor ertesi sabah
             DateTime lastDailyReport = DateTime.Now.Hour >= 9 ? DateTime.Today : DateTime.Today.AddDays(-1);
+            DateTime tokenWarnedFor = default;
 
             #region Randevu Alım Bölümü
             ConsoleUtil.WriteText("Yapmış olduğunuz seçimler doğrultusunda müsait olan ilk randevu otomatik olarak alınacaktır.", 3000);
@@ -73,6 +74,15 @@ namespace MHRS_OtomatikRandevu
                     lastDailyReport = DateTime.Today;
                     var daily = $"☀️ Günlük durum: bot çalışıyor{(PAUSED ? " (DURAKLATILDI)" : "")}\n\nDeneme: {attemptCount} (toplam hata: {STATE_ERRORS_TOTAL})\nSon sonuç: {STATE_LAST_RESULT}\nTarih: {DateRangeText()}";
                     _ = Task.Run(() => _notificationService.SendNotification(daily));
+                }
+
+                // Token modu: oturum bitmeden ~1 saat önce bir kez uyar
+                if (TOKEN_MODE && TOKEN_END_DATE != default && TOKEN_END_DATE != tokenWarnedFor
+                    && TOKEN_END_DATE - DateTime.Now < TimeSpan.FromHours(1) && _notificationService != null)
+                {
+                    tokenWarnedFor = TOKEN_END_DATE;
+                    var warn = $"⏳ MHRS oturumu {TOKEN_END_DATE:HH:mm}'de bitiyor. Kesinti olmaması için yeni oturumu /token ile gönderin.";
+                    _ = Task.Run(() => _notificationService.SendNotification(warn));
                 }
 
                 // /duraklat komutu: aramayı beklet

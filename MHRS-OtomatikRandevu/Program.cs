@@ -80,9 +80,22 @@ namespace MHRS_OtomatikRandevu
                 return;
             }
             ApplyConfig(cfg);
-            Console.WriteLine($"[INFO] TC ve şifre çevre değişkenlerinden yüklendi.");
+            Console.WriteLine(TOKEN_MODE
+                ? "[INFO] Token modu: şifreyle giriş yapılmayacak, tarayıcıdan alınan oturum kullanılacak."
+                : "[INFO] TC ve şifre çevre değişkenlerinden yüklendi.");
             if (ENV_SCHEDULE_TIMES.Count > 0)
                 Console.WriteLine($"[INFO] Özel zamanlama aktif: {string.Join(", ", ENV_SCHEDULE_TIMES)}");
+
+            // Telegram komutları (isteğe bağlı): yalnızca kayıtlı sohbetten gelen komutlar işlenir.
+            // Girişten ÖNCE başlar: token modunda ilk oturum /token komutuyla gelebilir.
+            var tg = _notificationService as NotificationService;
+            if (cfg.TelegramCommands && tg != null && !string.IsNullOrEmpty(tg.TELEGRAM_BOT_TOKEN) && !string.IsNullOrEmpty(tg.TELEGRAM_CHAT_ID))
+            {
+                new TelegramCommandListener(tg.TELEGRAM_BOT_TOKEN!, tg.TELEGRAM_CHAT_ID!, HandleCommand, tg.SendNotification).Start();
+                COMMANDS_ACTIVE = true;
+            }
+            else if (TOKEN_MODE)
+                Console.WriteLine("[UYARI] Token modu açık ama Telegram komutları kapalı: oturumu token.txt'ye elle yazmanız gerekecek.");
 
             // ÖNCE LOGIN YAP VE JWT TOKEN AL
             Console.WriteLine("[INFO] MHRS sistemine giriş yapılıyor...");
@@ -100,11 +113,6 @@ namespace MHRS_OtomatikRandevu
             if (target == null)
                 return;   // hata mesajı ResolveTarget içinde yazıldı
             CURRENT_TARGET = target;
-
-            // Telegram komutları (isteğe bağlı): yalnızca kayıtlı sohbetten gelen komutlar işlenir
-            var tg = _notificationService as NotificationService;
-            if (cfg.TelegramCommands && tg != null && !string.IsNullOrEmpty(tg.TELEGRAM_BOT_TOKEN) && !string.IsNullOrEmpty(tg.TELEGRAM_CHAT_ID))
-                new TelegramCommandListener(tg.TELEGRAM_BOT_TOKEN!, tg.TELEGRAM_CHAT_ID!, HandleCommand, tg.SendNotification).Start();
 
             RunSearchLoop(target);
         }
@@ -132,6 +140,7 @@ namespace MHRS_OtomatikRandevu
             INTERVAL_SECONDS = cfg.IntervalSeconds;
             ENV_SCHEDULE_TIMES = cfg.ScheduleTimes;
             DAILY_REPORT = cfg.DailyReport;
+            TOKEN_MODE = cfg.TokenMode;
             lock (DATE_LOCK)
             {
                 ENV_START_DATE = cfg.StartDate.ToString("dd-MM-yyyy");
