@@ -14,7 +14,7 @@ namespace MHRS_OtomatikRandevu.Services
         public ClientService()
         {
             _client = new HttpClient();
-            _client.Timeout = TimeSpan.FromMinutes(5); // TIMEOUT 5 dk!
+            _client.Timeout = TimeSpan.FromSeconds(30); // takılan istek botu dakikalarca bekletmesin
         }
 
         public ApiResponse<T> Get<T>(string baseUrl, string endpoint) where T : class
@@ -168,6 +168,12 @@ namespace MHRS_OtomatikRandevu.Services
                     }
                     
                     return mappedData!;
+                }
+                catch (SessionExpiredException)
+                {
+                    // Oturum düşmesi yukarı iletilmeli. Aşağıdaki genel catch bunu yutunca
+                    // bot "randevu yok" sanıp token süresi dolana kadar (~20 saat) kör kalıyordu.
+                    throw;
                 }
                 catch (TaskCanceledException)
                 {

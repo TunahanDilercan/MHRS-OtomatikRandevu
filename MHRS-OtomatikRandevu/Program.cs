@@ -102,6 +102,11 @@ namespace MHRS_OtomatikRandevu
                 return;
             }
 
+            // Çıkış kodları: 0 = randevu alındı, 1 = geçici hata (systemd yeniden başlatır),
+            // 2 = kalıcı hata / yapılandırma hatası / iş bitti (systemd yeniden başlatMAZ).
+            // Main içindeki her "return" varsayılan olarak 2 ile çıkar.
+            Environment.ExitCode = 2;
+
             // .env dosyasını elle yükle (DotNetEnv'e gerek kalmadan)
             if (File.Exists(".env"))
             {
@@ -182,6 +187,7 @@ namespace MHRS_OtomatikRandevu
             if (loginResult == null || string.IsNullOrEmpty(loginResult.Token))
             {
                 Console.WriteLine("[ERROR] MHRS sistemine giriş yapılamadı! TC kimlik ve şifrenizi kontrol edin.");
+                ExitForLoginFailure("ilk giriş");
                 return;
             }
             JWT_TOKEN = loginResult.Token;
@@ -239,7 +245,7 @@ namespace MHRS_OtomatikRandevu
             
             if (provinceListResponse == null || !provinceListResponse.Any())
             {
-                ConsoleUtil.WriteText("Bir hata meydana geldi!", 2000);
+                ExitWith(1, "MHRS'den liste alınamadı (bağlantı/bakım). Bir süre sonra yeniden denenecek.", notify: false);
                 return;
             }
             var provinceList = provinceListResponse
@@ -304,7 +310,7 @@ namespace MHRS_OtomatikRandevu
             
             if (districtList == null || !districtList.Any())
             {
-                ConsoleUtil.WriteText("Bir hata meydana geldi!", 2000);
+                ExitWith(1, "MHRS'den liste alınamadı (bağlantı/bakım). Bir süre sonra yeniden denenecek.", notify: false);
                 return;
             }
             if (!string.IsNullOrEmpty(districtIdStr))
@@ -336,7 +342,7 @@ namespace MHRS_OtomatikRandevu
             var clinicListResponse = _client.Get<List<GenericResponseModel>>(MHRSUrls.BaseUrl, string.Format(MHRSUrls.GetClinics, provinceIndex, districtIndex));
             if (!clinicListResponse.Success && (clinicListResponse.Data == null || !clinicListResponse.Data.Any()))
             {
-                ConsoleUtil.WriteText("Bir hata meydana geldi!", 2000);
+                ExitWith(1, "MHRS'den liste alınamadı (bağlantı/bakım). Bir süre sonra yeniden denenecek.", notify: false);
                 return;
             }
             var clinicList = clinicListResponse.Data;
@@ -362,7 +368,7 @@ namespace MHRS_OtomatikRandevu
             var hospitalListResponse = _client.Get<List<GenericResponseModel>>(MHRSUrls.BaseUrl, string.Format(MHRSUrls.GetHospitals, provinceIndex, districtIndex, clinicIndex));
             if (!hospitalListResponse.Success && (hospitalListResponse.Data == null || !hospitalListResponse.Data.Any()))
             {
-                ConsoleUtil.WriteText("Bir hata meydana geldi!", 2000);
+                ExitWith(1, "MHRS'den liste alınamadı (bağlantı/bakım). Bir süre sonra yeniden denenecek.", notify: false);
                 return;
             }
             var hospitalList = hospitalListResponse.Data;
@@ -394,7 +400,7 @@ namespace MHRS_OtomatikRandevu
             var placeListResponse = _client.Get<List<ClinicResponseModel>>(MHRSUrls.BaseUrl, string.Format(MHRSUrls.GetPlaces, hospitalIndex, clinicIndex));
             if (!placeListResponse.Success && (placeListResponse.Data == null || !placeListResponse.Data.Any()))
             {
-                ConsoleUtil.WriteText("Bir hata meydana geldi!", 2000);
+                ExitWith(1, "MHRS'den liste alınamadı (bağlantı/bakım). Bir süre sonra yeniden denenecek.", notify: false);
                 return;
             }
             var placeList = placeListResponse.Data;
@@ -426,7 +432,7 @@ namespace MHRS_OtomatikRandevu
             var doctorListResponse = _client.Get<List<GenericResponseModel>>(MHRSUrls.BaseUrl, string.Format(MHRSUrls.GetDoctors, hospitalIndex, clinicIndex));
             if (!doctorListResponse.Success && (doctorListResponse.Data == null || !doctorListResponse.Data.Any()))
             {
-                ConsoleUtil.WriteText("Bir hata meydana geldi!", 2000);
+                ExitWith(1, "MHRS'den liste alınamadı (bağlantı/bakım). Bir süre sonra yeniden denenecek.", notify: false);
                 return;
             }
             var doctorList = doctorListResponse.Data;
@@ -518,6 +524,7 @@ namespace MHRS_OtomatikRandevu
 
             bool appointmentState = false;
             int attemptCount = 0;
+            int consecutiveErrors = 0;   // üst üste arama hatası (randevu yok değil, gerçek hata)
             bool firstTestDone = false;
 
             // İlk randevu kontrolü (sürekli arama modu) - HEMEN BAŞLA
@@ -569,7 +576,7 @@ namespace MHRS_OtomatikRandevu
                     if (tkn == null || string.IsNullOrEmpty(tkn.Token))
                     {
                         LogStatus("Yeniden giriş hatası", null, true);
-                        ConsoleUtil.WriteText("Yeniden giriş hatası!", 2000);
+                        ExitForLoginFailure("token yenileme");
                         return;
                     }
                     JWT_TOKEN = tkn.Token;
@@ -592,9 +599,11 @@ namespace MHRS_OtomatikRandevu
                 };
 
                 SubSlot? slot = null;
+                SlotSearchResult? search = null;
                 try
                 {
-                    slot = GetSlot(_client!, slotRequestModel);
+                    search = GetSlot(_client!, slotRequestModel);
+                    slot = search.Slot;
                 }
                 catch (SessionExpiredException ex)
                 {
@@ -607,12 +616,7 @@ namespace MHRS_OtomatikRandevu
                     {
                         Console.WriteLine("[ERROR] ❌ Session recovery failed! Bot will exit.");
                         LogStatus("Session recovery failed! Bot exiting.", null, true);
-                        
-                        if (_notificationService != null)
-                        {
-                            var errorMessage = $"❌ MHRS Bot Durdu!\n\n🔐 Session recovery başarısız\n⏰ Saat: {DateTime.Now:HH:mm:ss}\n🔄 Deneme: #{attemptCount}\n\n⚠️ Manuel müdahale gerekiyor";
-                            _ = Task.Run(() => _notificationService.SendNotification(errorMessage));
-                        }
+                        ExitForLoginFailure($"oturum kurtarma (deneme #{attemptCount})");
                         return;
                     }
                     
@@ -634,7 +638,8 @@ namespace MHRS_OtomatikRandevu
                     // Retry the slot request with new token
                     try
                     {
-                        slot = GetSlot(_client!, slotRequestModel);
+                        search = GetSlot(_client!, slotRequestModel);
+                        slot = search.Slot;
                     }
                     catch (SessionExpiredException retryEx)
                     {
@@ -661,6 +666,27 @@ namespace MHRS_OtomatikRandevu
                     Thread.Sleep(TimeSpan.FromMinutes(1));
                     continue;
                 }
+                // Gerçek hata ile "randevu yok" ayrımı: hatalar artık sessizce "bulunamadı" sayılmıyor
+                if (search != null && search.IsError)
+                {
+                    consecutiveErrors++;
+                    LogStatus($"Arama hatası #{consecutiveErrors}: {search.ErrorCode} {search.ErrorMessage} (Deneme #{attemptCount})", null, true);
+                    if ((consecutiveErrors == 5 || consecutiveErrors % 30 == 0) && _notificationService != null)
+                    {
+                        var errMsg = $"⚠️ MHRS arama hatası ({consecutiveErrors} kez üst üste)\n\nKod: {search.ErrorCode ?? "-"}\nMesaj: {search.ErrorMessage ?? "-"}\n⏰ {DateTime.Now:HH:mm:ss}\n\nBot denemeye devam ediyor; bu süre boyunca randevu bulunamayabilir.";
+                        _ = Task.Run(() => _notificationService.SendNotification(errMsg));
+                    }
+                }
+                else if (search != null)
+                {
+                    if (consecutiveErrors >= 5 && _notificationService != null)
+                    {
+                        var okMsg = $"✅ MHRS arama tekrar çalışıyor ({consecutiveErrors} hatadan sonra).";
+                        _ = Task.Run(() => _notificationService.SendNotification(okMsg));
+                    }
+                    consecutiveErrors = 0;
+                }
+
                 if (slot == null || slot == default)
                 {
                     // İlk birkaç deneme ise özel mesaj
@@ -853,8 +879,11 @@ namespace MHRS_OtomatikRandevu
             }
             
             LogStatus("Program sonlandı: Randevu başarıyla alındı.", null, true);
-            Console.WriteLine("\nBot durdu. Herhangi bir tuşa basarak çıkabilirsiniz...");
-            Console.ReadKey();
+            if (!Console.IsInputRedirected)
+            {
+                Console.WriteLine("\nBot durdu. Herhangi bir tuşa basarak çıkabilirsiniz...");
+                Console.ReadKey();   // sunucuda (systemd) klavye yok; orada ReadKey hata fırlatıp çökertiyordu
+            }
             Environment.Exit(0);   // randevu alındıysa tamamen çık
             #endregion
 
@@ -885,7 +914,8 @@ namespace MHRS_OtomatikRandevu
                 var loginResponse = client.Post<LoginResponseModel>(MHRSUrls.BaseUrl, MHRSUrls.Login, loginRequestModel).Result;
                 if (loginResponse.Data == null || string.IsNullOrEmpty(loginResponse.Data?.Jwt))
                 {
-                    ConsoleUtil.WriteText("Giriş yapılırken bir hata meydana geldi!", 2000);
+                    LAST_LOGIN_ERROR = ApiErrorUtil.First(loginResponse.Errors);
+                    Console.WriteLine("Giriş yapılırken bir hata meydana geldi!");
                     return null;
                 }
 
@@ -937,6 +967,7 @@ namespace MHRS_OtomatikRandevu
                 var loginResponse = client.Post<LoginResponseModel>(MHRSUrls.BaseUrl, MHRSUrls.Login, loginRequestModel).Result;
                 if (loginResponse.Data == null || string.IsNullOrEmpty(loginResponse.Data?.Jwt))
                 {
+                    LAST_LOGIN_ERROR = ApiErrorUtil.First(loginResponse.Errors);
                     Console.WriteLine("[ERROR] ❌ Session recovery failed: Could not obtain new token");
                     LogStatus("Session recovery failed: Could not obtain new token", null, true);
                     return null;
@@ -961,14 +992,20 @@ namespace MHRS_OtomatikRandevu
 
         //Aynı gün içerisinde tek slot mevcut ise o slotu bulur
         //Aynı gün içerisinde birden fazla slot mevcut ise en yakın saati getirmez fakat en yakın güne ait bir slot getirir
-        static SubSlot? GetSlot(IClientService client, SlotRequestModel slotRequestModel)
+        record SlotSearchResult(SubSlot? Slot, bool IsError = false, string? ErrorCode = null, string? ErrorMessage = null);
+
+        static SlotSearchResult GetSlot(IClientService client, SlotRequestModel slotRequestModel)
         {
             var slotListResponse = client.Post<List<SlotResponseModel>>(MHRSUrls.BaseUrl, MHRSUrls.GetSlots, slotRequestModel).Result;
             if (slotListResponse.Data is null)
             {
-                // API'den yanıt alamadığında sadece log dosyasına yaz, konsola yazdırma
-                // Bu durum normal: randevu yoksa data null dönebilir
-                return null;
+                // RND4010 = "randevu bulunamadı": normal durum
+                if (ApiErrorUtil.Contains(slotListResponse.Errors, "RND4010"))
+                    return new SlotSearchResult(null);
+
+                // Diğer her şey gerçek hata (bağlantı, bakım, IP engeli, yetki...)
+                var (kod, mesaj) = ApiErrorUtil.First(slotListResponse.Errors);
+                return new SlotSearchResult(null, true, kod ?? "BAGLANTI", mesaj ?? "MHRS'den yanıt alınamadı");
             }
 
             // Tüm hekim / muayene yeri / gün kombinasyonlarındaki boş slotları topla
@@ -989,15 +1026,35 @@ namespace MHRS_OtomatikRandevu
                 .OrderBy(x => DateTime.TryParse(x.BaslangicZamani, out var dt) ? dt : DateTime.MaxValue)
                 .FirstOrDefault();
 
-            return slot;
+            return new SlotSearchResult(slot);
         }
 
         static bool MakeAppointment(IClientService client, AppointmentRequestModel appointmentRequestModel, bool sendNotification)
         {
             var randevuResp = client.PostSimple(MHRSUrls.BaseUrl, MHRSUrls.MakeAppointment, appointmentRequestModel);
-            if (randevuResp.StatusCode != HttpStatusCode.OK)
+
+            // HTTP 200 tek başına yetmez: gövdedeki "success" alanı ve hata kodu da kontrol edilir
+            bool bodySuccess = true;
+            string? hataDetay = null;
+            try
             {
-                var errorMessage = $"❌ Randevu alırken bir problem ile karşılaşıldı!\nRandevu Tarihi: {appointmentRequestModel.BaslangicZamani}";
+                var body = randevuResp.Content.ReadAsStringAsync().Result;
+                var parsed = System.Text.Json.JsonSerializer.Deserialize<ApiResponse<object>>(body);
+                if (parsed != null && (!parsed.Success || (parsed.Errors != null && parsed.Errors.Length > 0)))
+                {
+                    bodySuccess = false;
+                    var (kod, mesaj) = ApiErrorUtil.First(parsed.Errors);
+                    hataDetay = $"{kod} {mesaj}".Trim();
+                }
+            }
+            catch
+            {
+                // Gövde okunamazsa yalnızca HTTP koduna güvenilir (eski davranış)
+            }
+
+            if (randevuResp.StatusCode != HttpStatusCode.OK || !bodySuccess)
+            {
+                var errorMessage = $"❌ Randevu alırken bir problem ile karşılaşıldı!\nRandevu Tarihi: {appointmentRequestModel.BaslangicZamani}\nHTTP: {(int)randevuResp.StatusCode}{(hataDetay != null ? "\nMHRS: " + hataDetay : "")}";
                 Console.WriteLine(errorMessage);
                 
                 if (sendNotification && _notificationService != null)
@@ -1012,10 +1069,38 @@ namespace MHRS_OtomatikRandevu
 
             if (sendNotification && _notificationService != null)
             {
-                _ = Task.Run(() => _notificationService.SendNotification(successMessage));
+                // Süreç hemen ardından kapanıyor; bildirimin gitmesini bekle
+                try { _notificationService.SendNotification(successMessage).Wait(TimeSpan.FromSeconds(20)); } catch { }
             }
 
             return true;
+        }
+
+        static (string? Kod, string? Mesaj) LAST_LOGIN_ERROR;
+
+        /// <summary>Mesajı yazar/loglar, istenirse Telegram'a gönderir (bekler) ve verilen kodla çıkar.</summary>
+        static void ExitWith(int code, string message, bool notify)
+        {
+            Console.WriteLine($"[EXIT {code}] {message}");
+            LogStatus($"Çıkış ({code}): {message}", null, false);
+            if (notify && _notificationService != null)
+            {
+                try { _notificationService.SendNotification(message).Wait(TimeSpan.FromSeconds(20)); } catch { }
+            }
+            Environment.Exit(code);
+        }
+
+        /// <summary>
+        /// Giriş başarısızsa: yanlış şifre gibi kalıcı hatalarda kod 2 ile çık (systemd yeniden
+        /// başlatmaz, hatalı giriş sayısı artmaz, hesap kilitlenmez); geçici hatalarda kod 1.
+        /// </summary>
+        static void ExitForLoginFailure(string context)
+        {
+            var (kod, mesaj) = LAST_LOGIN_ERROR;
+            if (ApiErrorUtil.IsPermanentLoginError(kod))
+                ExitWith(2, $"❌ MHRS girişi reddedildi ({context}).\nKod: {kod}\n{mesaj}\n\nBot durduruldu ve yeniden denemeyecek (hesap kilitlenmesin). .env'deki TC/şifreyi düzeltip servisi yeniden başlatın.", notify: true);
+            else
+                ExitWith(1, $"MHRS girişi geçici olarak başarısız ({context}): {kod ?? "bağlantı"} {mesaj}", notify: false);
         }
 
         static void LogStatus(string status, string? slotTime = null, bool showConsole = false)
