@@ -14,7 +14,7 @@ namespace MHRS_OtomatikRandevu.Services
 
         public NotificationService()
         {
-            _httpClient = new HttpClient();
+            _httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
             
             // .env'den degerleri oku
             TELEGRAM_BOT_TOKEN = Environment.GetEnvironmentVariable("TELEGRAM_BOT_TOKEN")?.Trim() ?? "";
@@ -43,11 +43,14 @@ namespace MHRS_OtomatikRandevu.Services
                 // URL'yi olustur
                 var url = $"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage";
                 
+                // Düz metin: parse_mode=HTML, içinde '<' veya '&' geçen mesajları (ör. MHRS hata
+                // metinleri) Telegram'ın reddetmesine, bildirimin kaybolmasına yol açıyordu.
+                var text = $"MHRS Bot\n\n{message}";
+                if (text.Length > 4000) text = text.Substring(0, 4000) + "…";   // Telegram sınırı 4096
                 var payload = new
                 {
                     chat_id = TELEGRAM_CHAT_ID,
-                    text = $" MHRS Bot\n\n{message}",
-                    parse_mode = "HTML"
+                    text
                 };
 
                 var json = System.Text.Json.JsonSerializer.Serialize(payload);
