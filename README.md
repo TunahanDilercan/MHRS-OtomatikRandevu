@@ -60,8 +60,27 @@ Yalnızca `TELEGRAM_CHAT_ID` sohbetinden gelen komutlar işlenir. Bot yeniden ba
 | `/duraklat` · `/devam` | Aramayı beklet / sürdür |
 | `/tarih 18-11-2026` | Sadece o gün; `/tarih 18-11-2026 20-11-2026` aralık. Anında geçerli, bitince bot durur |
 | `/hedef` | Aranan il/klinik/hastane/doktor ID'leri |
+| `/token <değer>` | (Token modu) Tarayıcıdaki MHRS oturumunu bota ver |
 
-### 6. Çıkış Kodları (servis davranışı)
+### 6. e-Nabız / e-Devlet ile Giriş (Token Modu)
+
+MHRS sitesi TC + şifre ile girişi kaldırdı; bot şimdilik eski giriş adresini kullanıyor. Bu adres kapanırsa ya da MHRS şifreniz yoksa **token modu** kullanılır: bot hiç şifre denemez, sizin tarayıcıda açtığınız oturumu kullanır.
+
+1. `.env`: `MHRS_AUTH_MODE=token` ve `TELEGRAM_COMMANDS=1` (TC/şifre gerekmez).
+2. Bilgisayarda mhrs.gov.tr'ye **e-Nabız veya e-Devlet** ile girin.
+3. `F12` → **Console** sekmesine şunu yazın; değer panoya kopyalanır:
+   ```js
+   copy(localStorage.getItem('token-v-mhrs'))
+   ```
+4. Telegram'da bota `/token U2FsdGVkX1...` gönderin. Bot oturumun geçerlilik süresini yanıtlar. Mesajı sohbetten silin.
+
+Bilmeniz gerekenler:
+* Oturum yaklaşık bir gün geçerlidir; bitmeden ~1 saat önce bot hatırlatır, bitince aramayı duraklatıp yeni `/token` bekler.
+* Token'ı verdikten sonra **aynı hesapla başka bir yerden MHRS'ye girerseniz botun oturumu düşer**; bot haber verir ve yeni token bekler.
+* Telegram komutları kapalıysa oturumu sunucudaki `token.txt` dosyasına elle yazabilirsiniz.
+* Bot e-Nabız/e-Devlet'e kendisi girmez (captcha/SMS doğrulaması atlatılmaz).
+
+### 7. Çıkış Kodları (servis davranışı)
 
 | Kod | Anlamı | systemd |
 | :--- | :--- | :--- |
