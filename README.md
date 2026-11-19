@@ -44,6 +44,7 @@ Randevu alındığında anında bildirim almak için Telegram botu kurmanız ön
 
 | `MHRS_DOCTOR_ID` | Tek ID, `-1` (farketmez) veya virgülle birden fazla doktor (`34448,2783`): her denemede hepsine bakılır, en erken randevu alınır. |
 | `TELEGRAM_COMMANDS` | `1` = Telegram komutlarını dinle (aşağıya bakın). Aynı bot token'ını kullanan yalnızca **bir** bot dinleyebilir. |
+| `MHRS_DRY_RUN` | `1` = **deneme modu**: giriş, arama ve bildirimler gerçek ama randevu **alınmaz**. Canlı deneme için. |
 | `TELEGRAM_DAILY_REPORT` | `0` = her sabah 09:00 durum özetini kapat. Varsayılan açık. |
 
 **Sadece tek bir gün için randevu:** `MHRS_START_DATE` ve `MHRS_END_DATE`'i aynı güne, `MHRS_CONTINUOUS=1` yapın.

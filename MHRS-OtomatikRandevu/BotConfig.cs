@@ -38,6 +38,8 @@ namespace MHRS_OtomatikRandevu
         public bool TelegramCommands { get; private set; }
         /// <summary>Her sabah 09:00'da durum özeti (TELEGRAM_DAILY_REPORT=0 ile kapatılır).</summary>
         public bool DailyReport { get; private set; } = true;
+        /// <summary>MHRS_DRY_RUN=1: her şey gerçek (giriş, arama, bildirim) ama randevu ALINMAZ. Canlı deneme için.</summary>
+        public bool DryRun { get; private set; }
 
         /// <summary>Botu durdurmayan ama kullanıcıya gösterilmesi gereken uyarılar.</summary>
         public List<string> Warnings { get; } = new();
@@ -106,6 +108,7 @@ namespace MHRS_OtomatikRandevu
             c.Continuous = Val("MHRS_CONTINUOUS") == "1";
             c.TelegramCommands = Val("TELEGRAM_COMMANDS") == "1";
             c.DailyReport = Val("TELEGRAM_DAILY_REPORT") != "0";
+            c.DryRun = Val("MHRS_DRY_RUN") == "1";
 
             var interval = Val("MHRS_INTERVAL_SECONDS");
             if (interval != null)

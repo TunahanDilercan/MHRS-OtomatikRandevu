@@ -34,6 +34,8 @@ namespace MHRS_OtomatikRandevu
             Console.WriteLine($"Hastane({hospitalIndex}) Yer({placeIndex}) Doktor({doctorIndex})");
             Console.WriteLine($"Tarih Aralığı: {DateRangeText()}");
             Console.WriteLine($"Telegram Bildirimi: Her {TELEGRAM_NOTIFY_FREQUENCY} denemede bir");
+            if (DRY_RUN)
+                Console.WriteLine("🧪 DENEME MODU: randevu alınmayacak");
             Console.WriteLine(CONTINUOUS
                 ? $"Arama Modu: Sürekli (her {INTERVAL_SECONDS} sn)"
                 : $"Arama Modu: Saat pencereleri (pencere içinde her {INTERVAL_SECONDS} sn)");
@@ -57,7 +59,7 @@ namespace MHRS_OtomatikRandevu
             // İlk başlatma bildirimi gönder
             if (_notificationService != null)
             {
-                var startMessage = $"🚀 MHRS Bot Sürekli Arama Başladı!\n\n🕐 Başlangıç: {DateTime.Now:yyyy-MM-dd HH:mm:ss}\n🎯 Hedef: İl({provinceIndex}) İlçe({districtIndex}) Klinik({clinicIndex})\n📅 Tarih: {ENV_START_DATE}\n� Sürekli arama: İlk 5 deneme 3 dakikada bir\n⏰ Sonra belirlenen saatlerde çalışır";
+                var startMessage = (DRY_RUN ? "🧪 DENEME MODU (randevu alınmaz)\n" : "") + $"🚀 MHRS Bot Sürekli Arama Başladı!\n\n🕐 Başlangıç: {DateTime.Now:yyyy-MM-dd HH:mm:ss}\n🎯 Hedef: İl({provinceIndex}) İlçe({districtIndex}) Klinik({clinicIndex})\n📅 Tarih: {ENV_START_DATE}\n� Sürekli arama: İlk 5 deneme 3 dakikada bir\n⏰ Sonra belirlenen saatlerde çalışır";
                 _ = Task.Run(() => _notificationService.SendNotification(startMessage));
             }
 
@@ -274,6 +276,19 @@ namespace MHRS_OtomatikRandevu
                     BaslangicZamani = slot.BaslangicZamani,
                     BitisZamani = slot.BitisZamani
                 };
+
+                if (DRY_RUN)
+                {
+                    // Deneme modu: randevu alma adımına hiç girilmez
+                    LogStatus($"DENEME MODU: slot bulundu, randevu alınmadı - Deneme #{attemptCount}", slot.BaslangicZamani, true);
+                    if (_notificationService != null)
+                    {
+                        var dryMessage = $"🧪 DENEME MODU: slot bulundu ama randevu ALINMADI\n\n📅 {slot.BaslangicZamani}\n🔄 Deneme: #{attemptCount}";
+                        _ = Task.Run(() => _notificationService.SendNotification(dryMessage));
+                    }
+                    Thread.Sleep(TimeSpan.FromSeconds(INTERVAL_SECONDS));
+                    continue;
+                }
 
                 LogStatus($"RANDEVU BULUNDU! - Deneme #{attemptCount}", slot.BaslangicZamani, true);
                 Console.WriteLine($"\n🎉 Randevu bulundu!");
