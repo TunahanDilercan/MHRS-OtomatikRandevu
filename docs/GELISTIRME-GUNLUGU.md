@@ -90,6 +90,11 @@ Her faz ayrı bir dalda yapıldı, derlendi, test edildi ve PR olarak `master`'a
 - Bot e-Nabız/e-Devlet'e kendisi girmez (captcha/SMS atlatılmaz).
 - **Eklenen:** `Utils/MhrsTokenUtil.cs`
 
+### Sonrası (19 Kasım 2026) · PR #9, #10
+- **Deneme modu** `MHRS_DRY_RUN=1`: giriş, arama, bildirimler gerçek; slot bulunursa bildirilir ama randevu **alınmaz** (`MakeAppointment` de ikinci emniyet olarak istisna fırlatır). Canlı test için.
+- **`deploy.sh` Windows düzeltmesi:** Git Bash `/d/...` mutlak yollarını `dotnet` seçenek sanıyordu → göreli yollar + `.deploy-out/`.
+- **İlk canlı deneme (yeni sürüm, deneme modu):** sunucuda ayrı `mhrs-test` hedefi `deploy.sh test --yeni` ile kuruldu, `deploy.sh test` ile güncellendi. Doğrulananlar: giriş, iki doktorlu hedef doğrulama, arama ("randevu yok" hata olarak sayılmadı), Telegram komut dinleyicisinin başlaması, ~46 MB bellek.
+
 ---
 
 ## Ayar Değişiklikleri (`.env`)
@@ -106,6 +111,7 @@ Her faz ayrı bir dalda yapıldı, derlendi, test edildi ve PR olarak `master`'a
 | `TELEGRAM_COMMANDS` | Yeni | `1` = komutları dinle |
 | `TELEGRAM_DAILY_REPORT` | Yeni | `0` = sabah özetini kapat |
 | `MHRS_AUTH_MODE` | Yeni | `password` (varsayılan) / `token` |
+| `MHRS_DRY_RUN` | Yeni | `1` = deneme modu, randevu alınmaz |
 
 ## Bilinen Davranış Farkları
 - İlk 5 deneme arası bekleme 4 dk → 3 dk (mesajlarda zaten 3 dk yazıyordu).
@@ -136,9 +142,11 @@ deploy.sh  setup.sh  install_service.sh  .github/workflows/ci.yml
 
 ## Kalan İşler
 
-- [ ] **Sunucudaki botları yeni sürüme geçir.** Sunucuda hâlâ Faz 0 yamalı eski sürüm çalışıyor. Çalışan tek günlük arama bitince `./deploy.sh <hedef>` ile geçir, canlı MHRS'de uçtan uca dene.
+- [x] **Yeni sürümü sunucuda canlı dene** — deneme modunda (`mhrs-test`), 19.11.2026. `deploy.sh` hem `--yeni` hem güncelleme yolu doğrulandı.
+- [ ] **Gerçek bir aramayı yeni sürümle başlat** (deneme modu kapalı). Eski sürümlü hedefler (`karaman`, `konya`) işini bitirdi; yeni arama `./deploy.sh <hedef> --yeni` ile kurulmalı.
+- [ ] **Slot bulunduğunda deneme modu yolu** henüz canlıda tetiklenmedi (aranan doktorlarda boş yer yoktu).
 - [ ] **Token modunu gerçek e-Nabız oturumuyla dene.** Şifre çözme `openssl` ile üretilmiş örnekle doğrulandı; gerçek oturumla henüz denenmedi.
-- [ ] **Telegram komutlarını gerçek botla dene** (`TELEGRAM_COMMANDS=1`). Aynı bot token'ını yalnızca bir bot dinleyebilir.
+- [ ] **Telegram komutlarını gerçek botla dene** (`TELEGRAM_COMMANDS=1`). Dinleyici sunucuda başladı; gruptan `/durum` gönderilerek yanıt kontrol edilmeli. Aynı bot token'ını yalnızca bir bot dinleyebilir.
 - [ ] **Eski GitHub secret'larını sil** (`MHRS_TC`, `MHRS_PASSWORD`, `IL_ID`, `ILCE_ID`, `KLINIK_ID`, `VPN_*`) — artık kullanan iş akışı yok. Onay bekliyor.
 - [ ] (İsteğe bağlı) Model sınıflarındaki nullable uyarılarını temizle.
 - [ ] (İsteğe bağlı) `SetupWizard.cs`'teki `.user_history` düz metin şifre saklamayı kaldır veya şifrele.
