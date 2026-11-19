@@ -33,15 +33,17 @@ fi
 REMOTE="$USER_@$MHRS_SSH_HOST"
 DIR="/opt/mhrs-$TARGET"
 SVC="mhrs-$TARGET"
-ROOT="$(cd "$(dirname "$0")" && pwd)"
-OUT="$(mktemp -d)"
+# Göreli yollar: Windows Git Bash'te /d/... gibi mutlak yollar dotnet'e seçenek (/switch) gibi görünüyor
+cd "$(dirname "$0")"
+OUT=".deploy-out"
+rm -rf "$OUT"
 trap 'rm -rf "$OUT"' EXIT
 
 echo "==> Testler"
-dotnet test "$ROOT/MHRS-OtomatikRandevu.Tests" --nologo -v q
+dotnet test MHRS-OtomatikRandevu.Tests --nologo -v q
 
 echo "==> Derleniyor ($RID, self-contained tek dosya)"
-dotnet publish "$ROOT/MHRS-OtomatikRandevu/MHRS-OtomatikRandevu.csproj" -c Release -r "$RID" \
+dotnet publish MHRS-OtomatikRandevu/MHRS-OtomatikRandevu.csproj -c Release -r "$RID" \
     --self-contained true -p:PublishSingleFile=true --nologo -v q -o "$OUT"
 
 if [[ "$NEW" == "--yeni" ]]; then
