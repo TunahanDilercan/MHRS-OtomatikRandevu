@@ -376,3 +376,6 @@ randevu_basarili.txt
 Data/
 .env.save*
 .env.backup
+
+# deploy.sh gecici derleme klasoru
+.deploy-out/
