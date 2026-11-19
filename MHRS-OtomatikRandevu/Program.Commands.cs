@@ -107,7 +107,7 @@ namespace MHRS_OtomatikRandevu
             {
                 case "durum":
                     var last = STATE_LAST_ATTEMPT == default ? "-" : $"{STATE_LAST_ATTEMPT:dd.MM HH:mm:ss}";
-                    return $"📊 Durum: {(PAUSED ? "⏸ DURAKLATILDI" : "🔍 aranıyor")}\n" +
+                    return $"📊 Durum: {(PAUSED ? "⏸ DURAKLATILDI" : "🔍 aranıyor")}{(DRY_RUN ? " (🧪 deneme modu, randevu alınmaz)" : "")}\n" +
                            $"Çalışma: {DateTime.Now - STARTED_AT:d\\.hh\\:mm} (g.ss:dd)\n" +
                            $"Deneme: {STATE_ATTEMPTS} (toplam hata: {STATE_ERRORS_TOTAL})\n" +
                            $"Son deneme: {last} → {STATE_LAST_RESULT}\n" +

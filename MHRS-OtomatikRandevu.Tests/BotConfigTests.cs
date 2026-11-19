@@ -109,3 +109,29 @@ public class BotConfigTests
         Assert.Single(c.Warnings);
     }
 }
+
+public class DenemeModuTests
+{
+    static BotConfig Load(string? dry)
+    {
+        var env = new Dictionary<string, string?>
+        {
+            ["MHRS_TC"] = "1", ["MHRS_PASSWORD"] = "x", ["MHRS_PROVINCE_ID"] = "42",
+            ["MHRS_DISTRICT_ID"] = "-1", ["MHRS_CLINIC_ID"] = "144", ["MHRS_DRY_RUN"] = dry,
+        };
+        return BotConfig.From(k => env.TryGetValue(k, out var v) ? v : null, new DateTime(2026, 11, 19)).Config;
+    }
+
+    [Fact]
+    public void Varsayilan_gercek_mod()
+    {
+        Assert.False(Load(null).DryRun);
+        Assert.False(Load("0").DryRun);
+    }
+
+    [Fact]
+    public void Deneme_modu_acilir()
+    {
+        Assert.True(Load("1").DryRun);
+    }
+}

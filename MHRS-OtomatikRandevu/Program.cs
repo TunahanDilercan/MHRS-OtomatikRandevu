@@ -39,6 +39,7 @@ namespace MHRS_OtomatikRandevu
         static string? QUERY_START;   // MHRS slot sorgusu başlangıcı (yyyy-MM-dd HH:mm:ss)
         static string? QUERY_END;     // MHRS slot sorgusu bitişi
         static bool DAILY_REPORT = true;
+        static bool DRY_RUN;   // MHRS_DRY_RUN=1: randevu alma adımı hiç çalışmaz
 
         static void Main(string[] args)
         {
@@ -141,6 +142,9 @@ namespace MHRS_OtomatikRandevu
             ENV_SCHEDULE_TIMES = cfg.ScheduleTimes;
             DAILY_REPORT = cfg.DailyReport;
             TOKEN_MODE = cfg.TokenMode;
+            DRY_RUN = cfg.DryRun;
+            if (DRY_RUN)
+                Console.WriteLine("[UYARI] DENEME MODU (MHRS_DRY_RUN=1): slot bulunsa bile randevu ALINMAYACAK.");
             lock (DATE_LOCK)
             {
                 ENV_START_DATE = cfg.StartDate.ToString("dd-MM-yyyy");

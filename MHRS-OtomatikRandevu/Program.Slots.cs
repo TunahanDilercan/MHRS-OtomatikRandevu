@@ -114,6 +114,10 @@ namespace MHRS_OtomatikRandevu
 
         static bool MakeAppointment(IClientService client, AppointmentRequestModel appointmentRequestModel, bool sendNotification)
         {
+            // İkinci emniyet: deneme modunda randevu isteği asla gönderilmez
+            if (DRY_RUN)
+                throw new InvalidOperationException("MHRS_DRY_RUN=1 iken randevu alınamaz.");
+
             var randevuResp = client.PostSimple(MHRSUrls.BaseUrl, MHRSUrls.MakeAppointment, appointmentRequestModel);
 
             // HTTP 200 tek başına yetmez: gövdedeki "success" alanı ve hata kodu da kontrol edilir
